@@ -13,6 +13,7 @@ import { Route as DesignSystemRouteImport } from './routes/design-system'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWorkspaceRouteImport } from './routes/_app.workspace'
+import { Route as AppRepositoryRouteImport } from './routes/_app.repository'
 import { Route as AppArchitectureRouteImport } from './routes/_app.architecture'
 
 const DesignSystemRoute = DesignSystemRouteImport.update({
@@ -34,6 +35,11 @@ const AppWorkspaceRoute = AppWorkspaceRouteImport.update({
   path: '/workspace',
   getParentRoute: () => AppRoute,
 } as any)
+const AppRepositoryRoute = AppRepositoryRouteImport.update({
+  id: '/repository',
+  path: '/repository',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppArchitectureRoute = AppArchitectureRouteImport.update({
   id: '/architecture',
   path: '/architecture',
@@ -44,11 +50,13 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/design-system': typeof DesignSystemRoute
   '/architecture': typeof AppArchitectureRoute
+  '/repository': typeof AppRepositoryRoute
   '/workspace': typeof AppWorkspaceRoute
 }
 export interface FileRoutesByTo {
   '/design-system': typeof DesignSystemRoute
   '/architecture': typeof AppArchitectureRoute
+  '/repository': typeof AppRepositoryRoute
   '/workspace': typeof AppWorkspaceRoute
   '/': typeof AppIndexRoute
 }
@@ -57,19 +65,26 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/design-system': typeof DesignSystemRoute
   '/_app/architecture': typeof AppArchitectureRoute
+  '/_app/repository': typeof AppRepositoryRoute
   '/_app/workspace': typeof AppWorkspaceRoute
   '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/design-system' | '/architecture' | '/workspace'
+  fullPaths:
+    | '/'
+    | '/design-system'
+    | '/architecture'
+    | '/repository'
+    | '/workspace'
   fileRoutesByTo: FileRoutesByTo
-  to: '/design-system' | '/architecture' | '/workspace' | '/'
+  to: '/design-system' | '/architecture' | '/repository' | '/workspace' | '/'
   id:
     | '__root__'
     | '/_app'
     | '/design-system'
     | '/_app/architecture'
+    | '/_app/repository'
     | '/_app/workspace'
     | '/_app/'
   fileRoutesById: FileRoutesById
@@ -109,6 +124,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWorkspaceRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/repository': {
+      id: '/_app/repository'
+      path: '/repository'
+      fullPath: '/repository'
+      preLoaderRoute: typeof AppRepositoryRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/architecture': {
       id: '/_app/architecture'
       path: '/architecture'
@@ -121,12 +143,14 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppArchitectureRoute: typeof AppArchitectureRoute
+  AppRepositoryRoute: typeof AppRepositoryRoute
   AppWorkspaceRoute: typeof AppWorkspaceRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppArchitectureRoute: AppArchitectureRoute,
+  AppRepositoryRoute: AppRepositoryRoute,
   AppWorkspaceRoute: AppWorkspaceRoute,
   AppIndexRoute: AppIndexRoute,
 }
