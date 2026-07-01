@@ -77,14 +77,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "ArchForge — Software Architecture Workstation" },
+      {
+        name: "description",
+        content:
+          "ArchForge turns software requirements into production-ready architecture, database design, API specs, and engineering documentation.",
+      },
+      { name: "author", content: "ArchForge" },
+      { property: "og:title", content: "ArchForge — Software Architecture Workstation" },
+      {
+        property: "og:description",
+        content: "From requirements to production architecture — the engineering workstation for software architects.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
