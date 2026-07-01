@@ -3,6 +3,7 @@ import {
   Activity,
   ArrowUpRight,
   ArrowDownRight,
+  Bell,
   Box,
   CheckCircle2,
   Database,
@@ -415,6 +416,3 @@ function SectionHeader({ eyebrow, title, hint }: { eyebrow: string; title: strin
     </div>
   );
 }
-
-// Local import to satisfy Bell reference
-import { Bell } from "lucide-react";
