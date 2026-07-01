@@ -16,6 +16,7 @@ import { Route as AppWorkspaceRouteImport } from './routes/_app.workspace'
 import { Route as AppRepositoryRouteImport } from './routes/_app.repository'
 import { Route as AppDocumentationRouteImport } from './routes/_app.documentation'
 import { Route as AppArchitectureRouteImport } from './routes/_app.architecture'
+import { Route as AppAnalyticsRouteImport } from './routes/_app.analytics'
 
 const DesignSystemRoute = DesignSystemRouteImport.update({
   id: '/design-system',
@@ -51,10 +52,16 @@ const AppArchitectureRoute = AppArchitectureRouteImport.update({
   path: '/architecture',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/design-system': typeof DesignSystemRoute
+  '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
   '/documentation': typeof AppDocumentationRoute
   '/repository': typeof AppRepositoryRoute
@@ -62,6 +69,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/design-system': typeof DesignSystemRoute
+  '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
   '/documentation': typeof AppDocumentationRoute
   '/repository': typeof AppRepositoryRoute
@@ -72,6 +80,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/design-system': typeof DesignSystemRoute
+  '/_app/analytics': typeof AppAnalyticsRoute
   '/_app/architecture': typeof AppArchitectureRoute
   '/_app/documentation': typeof AppDocumentationRoute
   '/_app/repository': typeof AppRepositoryRoute
@@ -83,6 +92,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/design-system'
+    | '/analytics'
     | '/architecture'
     | '/documentation'
     | '/repository'
@@ -90,6 +100,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/design-system'
+    | '/analytics'
     | '/architecture'
     | '/documentation'
     | '/repository'
@@ -99,6 +110,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/design-system'
+    | '/_app/analytics'
     | '/_app/architecture'
     | '/_app/documentation'
     | '/_app/repository'
@@ -162,10 +174,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppArchitectureRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/analytics': {
+      id: '/_app/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AppAnalyticsRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
+  AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppArchitectureRoute: typeof AppArchitectureRoute
   AppDocumentationRoute: typeof AppDocumentationRoute
   AppRepositoryRoute: typeof AppRepositoryRoute
@@ -174,6 +194,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAnalyticsRoute: AppAnalyticsRoute,
   AppArchitectureRoute: AppArchitectureRoute,
   AppDocumentationRoute: AppDocumentationRoute,
   AppRepositoryRoute: AppRepositoryRoute,
