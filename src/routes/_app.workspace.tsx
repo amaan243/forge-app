@@ -57,9 +57,9 @@ function WorkspacePage() {
     <div className="h-[calc(100vh-3rem)] flex flex-col">
       <ProjectTimeline />
       <div className="flex-1 min-h-0">
-        <ResizablePanelGroup direction="vertical">
+        <ResizablePanelGroup orientation="vertical">
           <ResizablePanel defaultSize={72} minSize={40}>
-            <ResizablePanelGroup direction="horizontal">
+            <ResizablePanelGroup orientation="horizontal">
               <ResizablePanel defaultSize={28} minSize={18}>
                 <RequirementEditor />
               </ResizablePanel>
