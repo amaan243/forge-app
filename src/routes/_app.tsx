@@ -17,7 +17,14 @@ export const Route = createFileRoute("/_app")({
   component: AppShell,
 });
 
-const NAV = [
+type NavItem = {
+  to: "/" | "/workspace" | "/architecture" | "/repository" | "/documentation" | "/analytics" | "/exports" | "/settings";
+  label: string;
+  icon: typeof LayoutDashboard;
+  exact?: boolean;
+};
+
+const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { to: "/workspace", label: "Workspace", icon: Workflow },
   { to: "/architecture", label: "Architecture", icon: Network },
