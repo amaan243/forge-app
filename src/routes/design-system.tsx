@@ -29,7 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/design-system")({
   head: () => ({
     meta: [
       { title: "ArchForge — Design System" },
