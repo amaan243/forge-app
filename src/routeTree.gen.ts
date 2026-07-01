@@ -10,32 +10,41 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as DesignSystemRouteImport } from './routes/design-system'
+import { Route as AppRouteImport } from './routes/_app'
 
 const DesignSystemRoute = DesignSystemRouteImport.update({
   id: '/design-system',
   path: '/design-system',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
+  '/': typeof AppRoute
   '/design-system': typeof DesignSystemRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof AppRoute
   '/design-system': typeof DesignSystemRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/_app': typeof AppRoute
   '/design-system': typeof DesignSystemRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/design-system'
+  fullPaths: '/' | '/design-system'
   fileRoutesByTo: FileRoutesByTo
-  to: '/design-system'
-  id: '__root__' | '/design-system'
+  to: '/' | '/design-system'
+  id: '__root__' | '/_app' | '/design-system'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  AppRoute: typeof AppRoute
   DesignSystemRoute: typeof DesignSystemRoute
 }
 
@@ -48,10 +57,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DesignSystemRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
+  AppRoute: AppRoute,
   DesignSystemRoute: DesignSystemRoute,
 }
 export const routeTree = rootRouteImport

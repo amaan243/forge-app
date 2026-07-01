@@ -26,7 +26,7 @@ const NAV = [
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/exports", label: "Exports", icon: Download },
   { to: "/settings", label: "Settings", icon: Settings },
-] as const;
+];
 
 function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
