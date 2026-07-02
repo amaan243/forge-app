@@ -24,6 +24,11 @@ import {
   XCircle,
   ZoomIn,
   ZoomOut,
+  X,
+  Activity,
+  ShieldAlert,
+  Layers,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,6 +58,8 @@ export const Route = createFileRoute("/_app/workspace")({
 });
 
 function WorkspacePage() {
+  const [selected, setSelected] = useState<string | null>("user");
+  const [rightTab, setRightTab] = useState<"inspector" | "ai">("inspector");
   return (
     <div className="h-[calc(100vh-3rem)] flex flex-col">
       <ProjectTimeline />
@@ -65,11 +72,22 @@ function WorkspacePage() {
               </ResizablePanel>
               <ResizableHandle withHandle />
               <ResizablePanel defaultSize={48} minSize={30}>
-                <ArchitectureCanvas />
+                <ArchitectureCanvas
+                  selected={selected}
+                  onSelect={(id) => {
+                    setSelected(id);
+                    setRightTab("inspector");
+                  }}
+                />
               </ResizablePanel>
               <ResizableHandle withHandle />
               <ResizablePanel defaultSize={24} minSize={18}>
-                <AIRecommendations />
+                <RightPane
+                  tab={rightTab}
+                  onTab={setRightTab}
+                  selected={selected}
+                  onClose={() => setSelected(null)}
+                />
               </ResizablePanel>
             </ResizablePanelGroup>
           </ResizablePanel>
@@ -269,7 +287,13 @@ const EDGES: Edge[] = [
   { from: "notif", to: "s3" },
 ];
 
-function ArchitectureCanvas() {
+function ArchitectureCanvas({
+  selected,
+  onSelect,
+}: {
+  selected: string | null;
+  onSelect: (id: string) => void;
+}) {
   const [zoom, setZoom] = useState(1);
   const width = 760;
   const height = 420;
@@ -346,16 +370,29 @@ function ArchitectureCanvas() {
             })}
           </svg>
           {NODES.map((n) => (
-            <CanvasNode key={n.id} node={n} />
+            <CanvasNode
+              key={n.id}
+              node={n}
+              selected={selected === n.id}
+              onClick={() => onSelect(n.id)}
+            />
           ))}
         </div>
-        <MiniMap />
+        <MiniMap selected={selected} />
       </div>
     </div>
   );
 }
 
-function CanvasNode({ node }: { node: Node }) {
+function CanvasNode({
+  node,
+  selected,
+  onClick,
+}: {
+  node: Node;
+  selected: boolean;
+  onClick: () => void;
+}) {
   const kindMap: Record<string, string> = {
     web: "border-info/40",
     gateway: "border-primary/50",
@@ -366,12 +403,13 @@ function CanvasNode({ node }: { node: Node }) {
     storage: "border-success/40",
   };
   return (
-    <div
+    <button
       className={
-        "absolute w-[140px] rounded border bg-panel shadow-sm select-none cursor-grab active:cursor-grabbing " +
-        kindMap[node.kind]
+        "absolute w-[140px] rounded border bg-panel shadow-sm select-none text-left transition-all " +
+        (selected ? "border-primary ring-1 ring-primary/40 shadow-md" : kindMap[node.kind] + " hover:border-primary/50")
       }
       style={{ left: node.x, top: node.y }}
+      onClick={onClick}
     >
       <div className="flex items-center gap-1.5 h-6 px-2 border-b border-border">
         <span className="h-1.5 w-1.5 rounded-full bg-primary/70" />
@@ -380,13 +418,13 @@ function CanvasNode({ node }: { node: Node }) {
         </span>
       </div>
       <div className="px-2 py-2 text-xs font-medium">{node.label}</div>
-    </div>
+    </button>
   );
 }
 
-function MiniMap() {
+function MiniMap({ selected }: { selected: string | null }) {
   return (
-    <div className="absolute bottom-3 right-3 w-40 h-24 rounded border border-border bg-panel/80 backdrop-blur-sm overflow-hidden">
+    <div className="absolute bottom-3 right-3 w-48 h-32 rounded border border-border bg-panel/90 backdrop-blur-sm overflow-hidden shadow-lg">
       <div className="h-5 px-2 flex items-center justify-between border-b border-border">
         <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Minimap</span>
         <div className="flex gap-0.5">
@@ -398,15 +436,18 @@ function MiniMap() {
           </button>
         </div>
       </div>
-      <div className="relative h-[calc(100%-1.25rem)] grid-bg">
+      <div className="relative h-[calc(100%-1.25rem)] grid-bg cursor-pointer">
         {NODES.map((n) => (
           <div
             key={n.id}
-            className="absolute h-1.5 w-3 bg-primary/60 rounded-sm"
-            style={{ left: n.x / 8, top: (n.y / 8) + 4 }}
+            className={
+              "absolute h-1.5 w-3 rounded-sm " +
+              (selected === n.id ? "bg-primary ring-1 ring-primary/60" : "bg-primary/50")
+            }
+            style={{ left: n.x / 6.5, top: (n.y / 6.5) + 4 }}
           />
         ))}
-        <div className="absolute inset-2 border border-primary/50 rounded-sm" />
+        <div className="absolute inset-2 border border-primary/60 rounded-sm pointer-events-none" />
       </div>
     </div>
   );
