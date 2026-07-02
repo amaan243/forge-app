@@ -14,6 +14,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWorkspaceRouteImport } from './routes/_app.workspace'
 import { Route as AppRepositoryRouteImport } from './routes/_app.repository'
+import { Route as AppExportsRouteImport } from './routes/_app.exports'
 import { Route as AppDocumentationRouteImport } from './routes/_app.documentation'
 import { Route as AppArchitectureRouteImport } from './routes/_app.architecture'
 import { Route as AppAnalyticsRouteImport } from './routes/_app.analytics'
@@ -42,6 +43,11 @@ const AppRepositoryRoute = AppRepositoryRouteImport.update({
   path: '/repository',
   getParentRoute: () => AppRoute,
 } as any)
+const AppExportsRoute = AppExportsRouteImport.update({
+  id: '/exports',
+  path: '/exports',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDocumentationRoute = AppDocumentationRouteImport.update({
   id: '/documentation',
   path: '/documentation',
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
   '/documentation': typeof AppDocumentationRoute
+  '/exports': typeof AppExportsRoute
   '/repository': typeof AppRepositoryRoute
   '/workspace': typeof AppWorkspaceRoute
 }
@@ -72,6 +79,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
   '/documentation': typeof AppDocumentationRoute
+  '/exports': typeof AppExportsRoute
   '/repository': typeof AppRepositoryRoute
   '/workspace': typeof AppWorkspaceRoute
   '/': typeof AppIndexRoute
@@ -83,6 +91,7 @@ export interface FileRoutesById {
   '/_app/analytics': typeof AppAnalyticsRoute
   '/_app/architecture': typeof AppArchitectureRoute
   '/_app/documentation': typeof AppDocumentationRoute
+  '/_app/exports': typeof AppExportsRoute
   '/_app/repository': typeof AppRepositoryRoute
   '/_app/workspace': typeof AppWorkspaceRoute
   '/_app/': typeof AppIndexRoute
@@ -95,6 +104,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/architecture'
     | '/documentation'
+    | '/exports'
     | '/repository'
     | '/workspace'
   fileRoutesByTo: FileRoutesByTo
@@ -103,6 +113,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/architecture'
     | '/documentation'
+    | '/exports'
     | '/repository'
     | '/workspace'
     | '/'
@@ -113,6 +124,7 @@ export interface FileRouteTypes {
     | '/_app/analytics'
     | '/_app/architecture'
     | '/_app/documentation'
+    | '/_app/exports'
     | '/_app/repository'
     | '/_app/workspace'
     | '/_app/'
@@ -160,6 +172,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRepositoryRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/exports': {
+      id: '/_app/exports'
+      path: '/exports'
+      fullPath: '/exports'
+      preLoaderRoute: typeof AppExportsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/documentation': {
       id: '/_app/documentation'
       path: '/documentation'
@@ -188,6 +207,7 @@ interface AppRouteChildren {
   AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppArchitectureRoute: typeof AppArchitectureRoute
   AppDocumentationRoute: typeof AppDocumentationRoute
+  AppExportsRoute: typeof AppExportsRoute
   AppRepositoryRoute: typeof AppRepositoryRoute
   AppWorkspaceRoute: typeof AppWorkspaceRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -197,6 +217,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAnalyticsRoute: AppAnalyticsRoute,
   AppArchitectureRoute: AppArchitectureRoute,
   AppDocumentationRoute: AppDocumentationRoute,
+  AppExportsRoute: AppExportsRoute,
   AppRepositoryRoute: AppRepositoryRoute,
   AppWorkspaceRoute: AppWorkspaceRoute,
   AppIndexRoute: AppIndexRoute,
