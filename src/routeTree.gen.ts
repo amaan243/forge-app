@@ -13,12 +13,7 @@ import { Route as DesignSystemRouteImport } from './routes/design-system'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWorkspaceRouteImport } from './routes/_app.workspace'
-import { Route as AppSettingsRouteImport } from './routes/_app.settings'
-import { Route as AppRepositoryRouteImport } from './routes/_app.repository'
-import { Route as AppExportsRouteImport } from './routes/_app.exports'
-import { Route as AppDocumentationRouteImport } from './routes/_app.documentation'
 import { Route as AppArchitectureRouteImport } from './routes/_app.architecture'
-import { Route as AppAnalyticsRouteImport } from './routes/_app.analytics'
 
 const DesignSystemRoute = DesignSystemRouteImport.update({
   id: '/design-system',
@@ -39,56 +34,21 @@ const AppWorkspaceRoute = AppWorkspaceRouteImport.update({
   path: '/workspace',
   getParentRoute: () => AppRoute,
 } as any)
-const AppSettingsRoute = AppSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppRepositoryRoute = AppRepositoryRouteImport.update({
-  id: '/repository',
-  path: '/repository',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppExportsRoute = AppExportsRouteImport.update({
-  id: '/exports',
-  path: '/exports',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDocumentationRoute = AppDocumentationRouteImport.update({
-  id: '/documentation',
-  path: '/documentation',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppArchitectureRoute = AppArchitectureRouteImport.update({
   id: '/architecture',
   path: '/architecture',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
   getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/design-system': typeof DesignSystemRoute
-  '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
-  '/documentation': typeof AppDocumentationRoute
-  '/exports': typeof AppExportsRoute
-  '/repository': typeof AppRepositoryRoute
-  '/settings': typeof AppSettingsRoute
   '/workspace': typeof AppWorkspaceRoute
 }
 export interface FileRoutesByTo {
   '/design-system': typeof DesignSystemRoute
-  '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
-  '/documentation': typeof AppDocumentationRoute
-  '/exports': typeof AppExportsRoute
-  '/repository': typeof AppRepositoryRoute
-  '/settings': typeof AppSettingsRoute
   '/workspace': typeof AppWorkspaceRoute
   '/': typeof AppIndexRoute
 }
@@ -96,48 +56,20 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/design-system': typeof DesignSystemRoute
-  '/_app/analytics': typeof AppAnalyticsRoute
   '/_app/architecture': typeof AppArchitectureRoute
-  '/_app/documentation': typeof AppDocumentationRoute
-  '/_app/exports': typeof AppExportsRoute
-  '/_app/repository': typeof AppRepositoryRoute
-  '/_app/settings': typeof AppSettingsRoute
   '/_app/workspace': typeof AppWorkspaceRoute
   '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/design-system'
-    | '/analytics'
-    | '/architecture'
-    | '/documentation'
-    | '/exports'
-    | '/repository'
-    | '/settings'
-    | '/workspace'
+  fullPaths: '/' | '/design-system' | '/architecture' | '/workspace'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/design-system'
-    | '/analytics'
-    | '/architecture'
-    | '/documentation'
-    | '/exports'
-    | '/repository'
-    | '/settings'
-    | '/workspace'
-    | '/'
+  to: '/design-system' | '/architecture' | '/workspace' | '/'
   id:
     | '__root__'
     | '/_app'
     | '/design-system'
-    | '/_app/analytics'
     | '/_app/architecture'
-    | '/_app/documentation'
-    | '/_app/exports'
-    | '/_app/repository'
-    | '/_app/settings'
     | '/_app/workspace'
     | '/_app/'
   fileRoutesById: FileRoutesById
@@ -177,34 +109,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWorkspaceRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/settings': {
-      id: '/_app/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AppSettingsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/repository': {
-      id: '/_app/repository'
-      path: '/repository'
-      fullPath: '/repository'
-      preLoaderRoute: typeof AppRepositoryRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/exports': {
-      id: '/_app/exports'
-      path: '/exports'
-      fullPath: '/exports'
-      preLoaderRoute: typeof AppExportsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/documentation': {
-      id: '/_app/documentation'
-      path: '/documentation'
-      fullPath: '/documentation'
-      preLoaderRoute: typeof AppDocumentationRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/architecture': {
       id: '/_app/architecture'
       path: '/architecture'
@@ -212,34 +116,17 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppArchitectureRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/analytics': {
-      id: '/_app/analytics'
-      path: '/analytics'
-      fullPath: '/analytics'
-      preLoaderRoute: typeof AppAnalyticsRouteImport
-      parentRoute: typeof AppRoute
-    }
   }
 }
 
 interface AppRouteChildren {
-  AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppArchitectureRoute: typeof AppArchitectureRoute
-  AppDocumentationRoute: typeof AppDocumentationRoute
-  AppExportsRoute: typeof AppExportsRoute
-  AppRepositoryRoute: typeof AppRepositoryRoute
-  AppSettingsRoute: typeof AppSettingsRoute
   AppWorkspaceRoute: typeof AppWorkspaceRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppAnalyticsRoute: AppAnalyticsRoute,
   AppArchitectureRoute: AppArchitectureRoute,
-  AppDocumentationRoute: AppDocumentationRoute,
-  AppExportsRoute: AppExportsRoute,
-  AppRepositoryRoute: AppRepositoryRoute,
-  AppSettingsRoute: AppSettingsRoute,
   AppWorkspaceRoute: AppWorkspaceRoute,
   AppIndexRoute: AppIndexRoute,
 }
