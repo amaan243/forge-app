@@ -24,6 +24,11 @@ import {
   XCircle,
   ZoomIn,
   ZoomOut,
+  X,
+  Activity,
+  ShieldAlert,
+  Layers,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,6 +58,8 @@ export const Route = createFileRoute("/_app/workspace")({
 });
 
 function WorkspacePage() {
+  const [selected, setSelected] = useState<string | null>("user");
+  const [rightTab, setRightTab] = useState<"inspector" | "ai">("inspector");
   return (
     <div className="h-[calc(100vh-3rem)] flex flex-col">
       <ProjectTimeline />
@@ -65,11 +72,22 @@ function WorkspacePage() {
               </ResizablePanel>
               <ResizableHandle withHandle />
               <ResizablePanel defaultSize={48} minSize={30}>
-                <ArchitectureCanvas />
+                <ArchitectureCanvas
+                  selected={selected}
+                  onSelect={(id) => {
+                    setSelected(id);
+                    setRightTab("inspector");
+                  }}
+                />
               </ResizablePanel>
               <ResizableHandle withHandle />
               <ResizablePanel defaultSize={24} minSize={18}>
-                <AIRecommendations />
+                <RightPane
+                  tab={rightTab}
+                  onTab={setRightTab}
+                  selected={selected}
+                  onClose={() => setSelected(null)}
+                />
               </ResizablePanel>
             </ResizablePanelGroup>
           </ResizablePanel>
@@ -269,7 +287,13 @@ const EDGES: Edge[] = [
   { from: "notif", to: "s3" },
 ];
 
-function ArchitectureCanvas() {
+function ArchitectureCanvas({
+  selected,
+  onSelect,
+}: {
+  selected: string | null;
+  onSelect: (id: string) => void;
+}) {
   const [zoom, setZoom] = useState(1);
   const width = 760;
   const height = 420;
@@ -346,16 +370,29 @@ function ArchitectureCanvas() {
             })}
           </svg>
           {NODES.map((n) => (
-            <CanvasNode key={n.id} node={n} />
+            <CanvasNode
+              key={n.id}
+              node={n}
+              selected={selected === n.id}
+              onClick={() => onSelect(n.id)}
+            />
           ))}
         </div>
-        <MiniMap />
+        <MiniMap selected={selected} />
       </div>
     </div>
   );
 }
 
-function CanvasNode({ node }: { node: Node }) {
+function CanvasNode({
+  node,
+  selected,
+  onClick,
+}: {
+  node: Node;
+  selected: boolean;
+  onClick: () => void;
+}) {
   const kindMap: Record<string, string> = {
     web: "border-info/40",
     gateway: "border-primary/50",
@@ -366,12 +403,13 @@ function CanvasNode({ node }: { node: Node }) {
     storage: "border-success/40",
   };
   return (
-    <div
+    <button
       className={
-        "absolute w-[140px] rounded border bg-panel shadow-sm select-none cursor-grab active:cursor-grabbing " +
-        kindMap[node.kind]
+        "absolute w-[140px] rounded border bg-panel shadow-sm select-none text-left transition-all " +
+        (selected ? "border-primary ring-1 ring-primary/40 shadow-md" : kindMap[node.kind] + " hover:border-primary/50")
       }
       style={{ left: node.x, top: node.y }}
+      onClick={onClick}
     >
       <div className="flex items-center gap-1.5 h-6 px-2 border-b border-border">
         <span className="h-1.5 w-1.5 rounded-full bg-primary/70" />
@@ -380,13 +418,13 @@ function CanvasNode({ node }: { node: Node }) {
         </span>
       </div>
       <div className="px-2 py-2 text-xs font-medium">{node.label}</div>
-    </div>
+    </button>
   );
 }
 
-function MiniMap() {
+function MiniMap({ selected }: { selected: string | null }) {
   return (
-    <div className="absolute bottom-3 right-3 w-40 h-24 rounded border border-border bg-panel/80 backdrop-blur-sm overflow-hidden">
+    <div className="absolute bottom-3 right-3 w-48 h-32 rounded border border-border bg-panel/90 backdrop-blur-sm overflow-hidden shadow-lg">
       <div className="h-5 px-2 flex items-center justify-between border-b border-border">
         <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Minimap</span>
         <div className="flex gap-0.5">
@@ -398,15 +436,18 @@ function MiniMap() {
           </button>
         </div>
       </div>
-      <div className="relative h-[calc(100%-1.25rem)] grid-bg">
+      <div className="relative h-[calc(100%-1.25rem)] grid-bg cursor-pointer">
         {NODES.map((n) => (
           <div
             key={n.id}
-            className="absolute h-1.5 w-3 bg-primary/60 rounded-sm"
-            style={{ left: n.x / 8, top: (n.y / 8) + 4 }}
+            className={
+              "absolute h-1.5 w-3 rounded-sm " +
+              (selected === n.id ? "bg-primary ring-1 ring-primary/60" : "bg-primary/50")
+            }
+            style={{ left: n.x / 6.5, top: (n.y / 6.5) + 4 }}
           />
         ))}
-        <div className="absolute inset-2 border border-primary/50 rounded-sm" />
+        <div className="absolute inset-2 border border-primary/60 rounded-sm pointer-events-none" />
       </div>
     </div>
   );
@@ -466,6 +507,421 @@ function AIRecommendations() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/* ---------- right pane (inspector + AI) ---------- */
+
+type Inspector = {
+  id: string;
+  name: string;
+  kind: string;
+  description: string;
+  responsibilities: string[];
+  dependencies: string[];
+  connected: string[];
+  database: string;
+  endpoints: { method: string; path: string }[];
+  complexity: "Low" | "Medium" | "High";
+  latency: string;
+  security: string[];
+  cache: string;
+  suggestions: string[];
+};
+
+const INSPECTOR: Record<string, Inspector> = {
+  fe: {
+    id: "fe",
+    name: "Frontend",
+    kind: "web",
+    description: "React SPA served via CDN; entry point for all merchant dashboards.",
+    responsibilities: ["Render dashboards", "OAuth login flows", "Client-side routing"],
+    dependencies: ["API Gateway"],
+    connected: ["gw"],
+    database: "—",
+    endpoints: [{ method: "GET", path: "/" }, { method: "GET", path: "/dashboard" }],
+    complexity: "Medium",
+    latency: "60ms p95",
+    security: ["CSP strict-dynamic", "SRI on chunks"],
+    cache: "CDN edge cache, 30s stale-while-revalidate",
+    suggestions: ["Preload critical fonts", "Ship route-level code splits"],
+  },
+  gw: {
+    id: "gw",
+    name: "API Gateway",
+    kind: "gateway",
+    description: "Terminates TLS, authenticates requests, and routes to downstream services.",
+    responsibilities: ["JWT validation", "Rate limiting", "Request tracing"],
+    dependencies: ["Auth Service", "User Service", "Notification Service"],
+    connected: ["auth", "user", "notif"],
+    database: "—",
+    endpoints: [
+      { method: "POST", path: "/v1/auth" },
+      { method: "GET", path: "/v1/users/:id" },
+      { method: "POST", path: "/v1/notify" },
+    ],
+    complexity: "High",
+    latency: "12ms p95",
+    security: ["mTLS to services", "OWASP rules on WAF"],
+    cache: "None (auth-sensitive)",
+    suggestions: ["Add global 429 backoff hint", "Emit RED metrics per route"],
+  },
+  auth: {
+    id: "auth",
+    name: "Auth Service",
+    kind: "service",
+    description: "Issues short-lived JWTs, rotates refresh tokens, and enforces MFA.",
+    responsibilities: ["Login / logout", "Refresh rotation", "MFA challenges"],
+    dependencies: ["Redis"],
+    connected: ["redis", "gw"],
+    database: "Redis (session store)",
+    endpoints: [
+      { method: "POST", path: "/login" },
+      { method: "POST", path: "/refresh" },
+      { method: "POST", path: "/logout" },
+    ],
+    complexity: "High",
+    latency: "38ms p95",
+    security: ["PKCE required", "Rate limit /login 10/min/IP"],
+    cache: "Refresh tokens in Redis with 5m TTL",
+    suggestions: ["Enforce refresh-token rotation", "Add step-up auth for admin scopes"],
+  },
+  user: {
+    id: "user",
+    name: "User Service",
+    kind: "service",
+    description: "Canonical profile store; publishes user.updated events downstream.",
+    responsibilities: ["Profile CRUD", "Tenant membership", "Role assignment"],
+    dependencies: ["MongoDB", "RabbitMQ"],
+    connected: ["mongo", "mq", "gw"],
+    database: "MongoDB (users, tenants)",
+    endpoints: [
+      { method: "GET", path: "/v1/users/:id" },
+      { method: "POST", path: "/v1/users" },
+      { method: "PATCH", path: "/v1/users/:id" },
+    ],
+    complexity: "Medium",
+    latency: "48ms p95",
+    security: ["Field-level encryption on PII"],
+    cache: "60s LRU on hot profiles",
+    suggestions: ["Add read replica for reporting", "Denormalize tenant lookups"],
+  },
+  notif: {
+    id: "notif",
+    name: "Notification Service",
+    kind: "service",
+    description: "Fan-out delivery over email, SMS, and push via queue-backed workers.",
+    responsibilities: ["Templating", "Delivery routing", "Bounce handling"],
+    dependencies: ["RabbitMQ", "Object Storage"],
+    connected: ["mq", "s3", "gw"],
+    database: "S3 (rendered assets)",
+    endpoints: [
+      { method: "POST", path: "/v1/notify" },
+      { method: "GET", path: "/v1/deliveries/:id" },
+    ],
+    complexity: "High",
+    latency: "120ms p95",
+    security: ["Signed webhook callbacks"],
+    cache: "Compiled templates in-process",
+    suggestions: ["Split fan-out to worker pool", "Retry with jittered backoff"],
+  },
+  redis: {
+    id: "redis",
+    name: "Redis",
+    kind: "cache",
+    description: "Session store and rate-limit counters. Redis 7 with 3-node cluster.",
+    responsibilities: ["Session store", "Rate limit counters", "Ephemeral cache"],
+    dependencies: [],
+    connected: ["auth"],
+    database: "In-memory",
+    endpoints: [],
+    complexity: "Low",
+    latency: "0.6ms p95",
+    security: ["ACL per service", "TLS in transit"],
+    cache: "—",
+    suggestions: ["Enable RDB snapshots hourly"],
+  },
+  mq: {
+    id: "mq",
+    name: "RabbitMQ",
+    kind: "queue",
+    description: "Durable message broker for async fan-out between services.",
+    responsibilities: ["Queue durability", "Fan-out exchanges", "DLQ handling"],
+    dependencies: [],
+    connected: ["user", "notif"],
+    database: "—",
+    endpoints: [],
+    complexity: "Medium",
+    latency: "3ms p95",
+    security: ["vhost isolation per tenant"],
+    cache: "—",
+    suggestions: ["Add quorum queues for reliability"],
+  },
+  mongo: {
+    id: "mongo",
+    name: "MongoDB",
+    kind: "db",
+    description: "Document store for user, tenant, and configuration data.",
+    responsibilities: ["Persist users, tenants", "Secondary indexes"],
+    dependencies: [],
+    connected: ["user"],
+    database: "MongoDB 7",
+    endpoints: [],
+    complexity: "Medium",
+    latency: "9ms p95",
+    security: ["Encryption at rest", "IAM auth"],
+    cache: "WiredTiger cache 8 GB",
+    suggestions: ["Add TTL indexes for sessions"],
+  },
+  s3: {
+    id: "s3",
+    name: "Object Storage",
+    kind: "storage",
+    description: "Rendered notification assets and export bundles.",
+    responsibilities: ["Blob storage", "Lifecycle rules"],
+    dependencies: [],
+    connected: ["notif"],
+    database: "S3",
+    endpoints: [],
+    complexity: "Low",
+    latency: "24ms p95",
+    security: ["Bucket policy: private, signed URLs"],
+    cache: "—",
+    suggestions: ["Move cold exports to Glacier after 30d"],
+  },
+};
+
+function RightPane({
+  tab,
+  onTab,
+  selected,
+  onClose,
+}: {
+  tab: "inspector" | "ai";
+  onTab: (t: "inspector" | "ai") => void;
+  selected: string | null;
+  onClose: () => void;
+}) {
+  return (
+    <div className="h-full flex flex-col bg-panel/40">
+      <div className="h-9 shrink-0 border-b border-border flex items-center px-1">
+        <button
+          onClick={() => onTab("inspector")}
+          className={
+            "h-8 px-2.5 text-[11px] font-mono uppercase tracking-wider border-b-2 -mb-px transition-colors " +
+            (tab === "inspector"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground")
+          }
+        >
+          Inspector
+        </button>
+        <button
+          onClick={() => onTab("ai")}
+          className={
+            "h-8 px-2.5 text-[11px] font-mono uppercase tracking-wider border-b-2 -mb-px transition-colors " +
+            (tab === "ai"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground")
+          }
+        >
+          AI ({RECS.length})
+        </button>
+        {tab === "inspector" && selected && (
+          <button
+            onClick={onClose}
+            className="ml-auto h-7 w-7 grid place-items-center text-muted-foreground hover:text-foreground"
+            title="Deselect"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {tab === "ai" && <AIRecommendationsList />}
+        {tab === "inspector" && (selected ? <InspectorView data={INSPECTOR[selected]} /> : <InspectorEmpty />)}
+      </div>
+    </div>
+  );
+}
+
+function AIRecommendationsList() {
+  return <AIRecommendations />;
+}
+
+function InspectorEmpty() {
+  return (
+    <div className="h-full grid place-items-center p-6 text-center">
+      <div className="space-y-3 max-w-[220px]">
+        <div className="mx-auto h-10 w-10 grid place-items-center rounded border border-border bg-surface">
+          <Layers className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Select a service on the canvas to inspect its responsibilities, endpoints, and AI suggestions.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InspectorView({ data }: { data: Inspector | undefined }) {
+  if (!data) return <InspectorEmpty />;
+  const cxTone =
+    data.complexity === "High"
+      ? "text-destructive"
+      : data.complexity === "Medium"
+        ? "text-warning"
+        : "text-success";
+  return (
+    <div className="p-3 space-y-3 text-xs">
+      <div className="space-y-1">
+        <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+          {data.kind}
+        </div>
+        <div className="text-base font-display font-semibold tracking-tight">{data.name}</div>
+        <p className="text-muted-foreground leading-relaxed">{data.description}</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <MetaChip label="Complexity" value={data.complexity} tone={cxTone} />
+        <MetaChip label="Latency" value={data.latency} icon={Activity} />
+      </div>
+
+      <InspectorSection title="Responsibilities">
+        <ul className="space-y-1">
+          {data.responsibilities.map((r) => (
+            <li key={r} className="flex items-start gap-1.5">
+              <span className="mt-1 h-1 w-1 rounded-full bg-primary shrink-0" />
+              <span>{r}</span>
+            </li>
+          ))}
+        </ul>
+      </InspectorSection>
+
+      {data.dependencies.length > 0 && (
+        <InspectorSection title="Dependencies">
+          <div className="flex flex-wrap gap-1.5">
+            {data.dependencies.map((d) => (
+              <span key={d} className="h-6 px-2 rounded border border-border bg-surface text-[11px] font-mono flex items-center">
+                {d}
+              </span>
+            ))}
+          </div>
+        </InspectorSection>
+      )}
+
+      {data.connected.length > 0 && (
+        <InspectorSection title="Connected services">
+          <div className="space-y-1">
+            {data.connected.map((id) => {
+              const target = INSPECTOR[id];
+              if (!target) return null;
+              return (
+                <div key={id} className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground">
+                  <ArrowRight className="h-3 w-3" />
+                  <span>{target.name}</span>
+                </div>
+              );
+            })}
+          </div>
+        </InspectorSection>
+      )}
+
+      <InspectorSection title="Database">
+        <span className="font-mono text-[11px]">{data.database}</span>
+      </InspectorSection>
+
+      {data.endpoints.length > 0 && (
+        <InspectorSection title={`API endpoints (${data.endpoints.length})`}>
+          <div className="rounded border border-border overflow-hidden divide-y divide-border">
+            {data.endpoints.map((e) => (
+              <div key={e.method + e.path} className="flex items-center gap-2 h-7 px-2 bg-background">
+                <span
+                  className={
+                    "h-4 px-1 rounded text-[9px] font-mono uppercase " +
+                    (e.method === "GET"
+                      ? "bg-info/15 text-info"
+                      : e.method === "POST"
+                        ? "bg-success/15 text-success"
+                        : e.method === "PATCH"
+                          ? "bg-warning/15 text-warning"
+                          : "bg-destructive/15 text-destructive")
+                  }
+                >
+                  {e.method}
+                </span>
+                <span className="font-mono text-[11px] truncate">{e.path}</span>
+              </div>
+            ))}
+          </div>
+        </InspectorSection>
+      )}
+
+      <InspectorSection title="Caching strategy">
+        <p className="text-[11px] text-muted-foreground">{data.cache}</p>
+      </InspectorSection>
+
+      <InspectorSection title="Security" icon={ShieldAlert}>
+        <ul className="space-y-1">
+          {data.security.map((s) => (
+            <li key={s} className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+              <span className="mt-1 h-1 w-1 rounded-full bg-warning shrink-0" />
+              <span>{s}</span>
+            </li>
+          ))}
+        </ul>
+      </InspectorSection>
+
+      <InspectorSection title="AI suggestions" icon={Sparkles}>
+        <div className="space-y-1.5">
+          {data.suggestions.map((s) => (
+            <div key={s} className="rounded border border-border bg-background p-2 text-[11px]">
+              {s}
+            </div>
+          ))}
+        </div>
+      </InspectorSection>
+    </div>
+  );
+}
+
+function MetaChip({
+  label,
+  value,
+  tone,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+  icon?: typeof Activity;
+}) {
+  return (
+    <div className="rounded border border-border bg-background p-2">
+      <div className="flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+        {Icon && <Icon className="h-3 w-3" />} {label}
+      </div>
+      <div className={"mt-0.5 text-[13px] font-mono " + (tone ?? "")}>{value}</div>
+    </div>
+  );
+}
+
+function InspectorSection({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon?: typeof Activity;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+        {Icon && <Icon className="h-3 w-3" />} {title}
+      </div>
+      {children}
     </div>
   );
 }
