@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DesignSystemRouteImport } from './routes/design-system'
@@ -22,6 +23,11 @@ import { Route as AppDocumentationRouteImport } from './routes/_app.documentatio
 import { Route as AppArchitectureRouteImport } from './routes/_app.architecture'
 import { Route as AppAnalyticsRouteImport } from './routes/_app.analytics'
 
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/design-system': typeof DesignSystemRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
   '/documentation': typeof AppDocumentationRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/design-system': typeof DesignSystemRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
   '/documentation': typeof AppDocumentationRoute
@@ -114,6 +122,7 @@ export interface FileRoutesById {
   '/design-system': typeof DesignSystemRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/_app/analytics': typeof AppAnalyticsRoute
   '/_app/architecture': typeof AppArchitectureRoute
   '/_app/documentation': typeof AppDocumentationRoute
@@ -130,6 +139,7 @@ export interface FileRouteTypes {
     | '/design-system'
     | '/login'
     | '/register'
+    | '/verify-email'
     | '/analytics'
     | '/architecture'
     | '/documentation'
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/design-system'
     | '/login'
     | '/register'
+    | '/verify-email'
     | '/analytics'
     | '/architecture'
     | '/documentation'
@@ -156,6 +167,7 @@ export interface FileRouteTypes {
     | '/design-system'
     | '/login'
     | '/register'
+    | '/verify-email'
     | '/_app/analytics'
     | '/_app/architecture'
     | '/_app/documentation'
@@ -171,10 +183,18 @@ export interface RootRouteChildren {
   DesignSystemRoute: typeof DesignSystemRoute
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/register': {
       id: '/register'
       path: '/register'
@@ -291,6 +311,7 @@ const rootRouteChildren: RootRouteChildren = {
   DesignSystemRoute: DesignSystemRoute,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Mail, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AuthLayout, AuthCard } from "@/components/auth-shell";
 
@@ -18,11 +18,11 @@ function VerifyEmailPage() {
     <AuthLayout>
       <AuthCard title="Verify your email" subtitle="We sent a link to alex@acme.dev. Click it to activate your workspace.">
         <div className="grid place-items-center py-4">
-          <svg width="140" height="90" viewBox="0 0 140 90" className="text-border" aria-hidden>
-            <rect x="14" y="14" width="112" height="62" fill="none" stroke="currentColor" strokeWidth="1" />
-            <path d="M14 14 L70 52 L126 14" stroke="currentColor" strokeWidth="1" fill="none" />
-            <rect x="60" y="42" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1" className="text-primary" />
-            <Mail x="66" y="48" />
+          <svg width="160" height="100" viewBox="0 0 160 100" className="text-border" aria-hidden>
+            <rect x="20" y="18" width="120" height="70" fill="none" stroke="currentColor" strokeWidth="1" />
+            <path d="M20 18 L80 62 L140 18" stroke="currentColor" strokeWidth="1" fill="none" />
+            <rect x="66" y="46" width="28" height="20" fill="none" stroke="currentColor" strokeWidth="1" className="text-primary" />
+            <path d="M66 46 L80 60 L94 46" stroke="currentColor" strokeWidth="1" fill="none" className="text-primary" />
           </svg>
         </div>
         <div className="flex gap-2">
