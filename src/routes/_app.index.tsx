@@ -19,6 +19,7 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
+import { Radar, GaugeCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -56,7 +57,9 @@ function Dashboard() {
       <div className="min-w-0 p-6 lg:p-8 space-y-8 border-r border-border">
         <TopBanner />
         <QuickStats />
+        <WorkspaceInsights />
         <RecentProjects />
+        <SmartDocs />
         <RecentActivity />
       </div>
       <RightSidebar />
