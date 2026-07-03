@@ -19,6 +19,7 @@ import { Route as DesignSystemRouteImport } from './routes/design-system'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWorkspaceRouteImport } from './routes/_app.workspace'
+import { Route as AppVersionsRouteImport } from './routes/_app.versions'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppRepositoryRouteImport } from './routes/_app.repository'
 import { Route as AppExportsRouteImport } from './routes/_app.exports'
@@ -75,6 +76,11 @@ const AppWorkspaceRoute = AppWorkspaceRouteImport.update({
   path: '/workspace',
   getParentRoute: () => AppRoute,
 } as any)
+const AppVersionsRoute = AppVersionsRouteImport.update({
+  id: '/versions',
+  path: '/versions',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/exports': typeof AppExportsRoute
   '/repository': typeof AppRepositoryRoute
   '/settings': typeof AppSettingsRoute
+  '/versions': typeof AppVersionsRoute
   '/workspace': typeof AppWorkspaceRoute
 }
 export interface FileRoutesByTo {
@@ -137,6 +144,7 @@ export interface FileRoutesByTo {
   '/exports': typeof AppExportsRoute
   '/repository': typeof AppRepositoryRoute
   '/settings': typeof AppSettingsRoute
+  '/versions': typeof AppVersionsRoute
   '/workspace': typeof AppWorkspaceRoute
   '/': typeof AppIndexRoute
 }
@@ -156,6 +164,7 @@ export interface FileRoutesById {
   '/_app/exports': typeof AppExportsRoute
   '/_app/repository': typeof AppRepositoryRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/_app/versions': typeof AppVersionsRoute
   '/_app/workspace': typeof AppWorkspaceRoute
   '/_app/': typeof AppIndexRoute
 }
@@ -176,6 +185,7 @@ export interface FileRouteTypes {
     | '/exports'
     | '/repository'
     | '/settings'
+    | '/versions'
     | '/workspace'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -192,6 +202,7 @@ export interface FileRouteTypes {
     | '/exports'
     | '/repository'
     | '/settings'
+    | '/versions'
     | '/workspace'
     | '/'
   id:
@@ -210,6 +221,7 @@ export interface FileRouteTypes {
     | '/_app/exports'
     | '/_app/repository'
     | '/_app/settings'
+    | '/_app/versions'
     | '/_app/workspace'
     | '/_app/'
   fileRoutesById: FileRoutesById
@@ -297,6 +309,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWorkspaceRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/versions': {
+      id: '/_app/versions'
+      path: '/versions'
+      fullPath: '/versions'
+      preLoaderRoute: typeof AppVersionsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/settings': {
       id: '/_app/settings'
       path: '/settings'
@@ -349,6 +368,7 @@ interface AppRouteChildren {
   AppExportsRoute: typeof AppExportsRoute
   AppRepositoryRoute: typeof AppRepositoryRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppVersionsRoute: typeof AppVersionsRoute
   AppWorkspaceRoute: typeof AppWorkspaceRoute
   AppIndexRoute: typeof AppIndexRoute
 }
@@ -360,6 +380,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppExportsRoute: AppExportsRoute,
   AppRepositoryRoute: AppRepositoryRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppVersionsRoute: AppVersionsRoute,
   AppWorkspaceRoute: AppWorkspaceRoute,
   AppIndexRoute: AppIndexRoute,
 }
