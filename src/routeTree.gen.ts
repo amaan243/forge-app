@@ -19,10 +19,18 @@ import { Route as DesignSystemRouteImport } from './routes/design-system'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWorkspaceRouteImport } from './routes/_app.workspace'
+import { Route as AppVersionsRouteImport } from './routes/_app.versions'
+import { Route as AppTimelineRouteImport } from './routes/_app.timeline'
+import { Route as AppStoryRouteImport } from './routes/_app.story'
+import { Route as AppSnapshotsRouteImport } from './routes/_app.snapshots'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppRepositoryRouteImport } from './routes/_app.repository'
+import { Route as AppPlaygroundRouteImport } from './routes/_app.playground'
 import { Route as AppExportsRouteImport } from './routes/_app.exports'
+import { Route as AppDriftRouteImport } from './routes/_app.drift'
 import { Route as AppDocumentationRouteImport } from './routes/_app.documentation'
+import { Route as AppDependenciesRouteImport } from './routes/_app.dependencies'
+import { Route as AppCompareRouteImport } from './routes/_app.compare'
 import { Route as AppArchitectureRouteImport } from './routes/_app.architecture'
 import { Route as AppAnalyticsRouteImport } from './routes/_app.analytics'
 
@@ -75,6 +83,26 @@ const AppWorkspaceRoute = AppWorkspaceRouteImport.update({
   path: '/workspace',
   getParentRoute: () => AppRoute,
 } as any)
+const AppVersionsRoute = AppVersionsRouteImport.update({
+  id: '/versions',
+  path: '/versions',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTimelineRoute = AppTimelineRouteImport.update({
+  id: '/timeline',
+  path: '/timeline',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppStoryRoute = AppStoryRouteImport.update({
+  id: '/story',
+  path: '/story',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSnapshotsRoute = AppSnapshotsRouteImport.update({
+  id: '/snapshots',
+  path: '/snapshots',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -85,14 +113,34 @@ const AppRepositoryRoute = AppRepositoryRouteImport.update({
   path: '/repository',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPlaygroundRoute = AppPlaygroundRouteImport.update({
+  id: '/playground',
+  path: '/playground',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppExportsRoute = AppExportsRouteImport.update({
   id: '/exports',
   path: '/exports',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDriftRoute = AppDriftRouteImport.update({
+  id: '/drift',
+  path: '/drift',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDocumentationRoute = AppDocumentationRouteImport.update({
   id: '/documentation',
   path: '/documentation',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDependenciesRoute = AppDependenciesRouteImport.update({
+  id: '/dependencies',
+  path: '/dependencies',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCompareRoute = AppCompareRouteImport.update({
+  id: '/compare',
+  path: '/compare',
   getParentRoute: () => AppRoute,
 } as any)
 const AppArchitectureRoute = AppArchitectureRouteImport.update({
@@ -117,10 +165,18 @@ export interface FileRoutesByFullPath {
   '/verify-email': typeof VerifyEmailRoute
   '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
+  '/compare': typeof AppCompareRoute
+  '/dependencies': typeof AppDependenciesRoute
   '/documentation': typeof AppDocumentationRoute
+  '/drift': typeof AppDriftRoute
   '/exports': typeof AppExportsRoute
+  '/playground': typeof AppPlaygroundRoute
   '/repository': typeof AppRepositoryRoute
   '/settings': typeof AppSettingsRoute
+  '/snapshots': typeof AppSnapshotsRoute
+  '/story': typeof AppStoryRoute
+  '/timeline': typeof AppTimelineRoute
+  '/versions': typeof AppVersionsRoute
   '/workspace': typeof AppWorkspaceRoute
 }
 export interface FileRoutesByTo {
@@ -133,10 +189,18 @@ export interface FileRoutesByTo {
   '/verify-email': typeof VerifyEmailRoute
   '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
+  '/compare': typeof AppCompareRoute
+  '/dependencies': typeof AppDependenciesRoute
   '/documentation': typeof AppDocumentationRoute
+  '/drift': typeof AppDriftRoute
   '/exports': typeof AppExportsRoute
+  '/playground': typeof AppPlaygroundRoute
   '/repository': typeof AppRepositoryRoute
   '/settings': typeof AppSettingsRoute
+  '/snapshots': typeof AppSnapshotsRoute
+  '/story': typeof AppStoryRoute
+  '/timeline': typeof AppTimelineRoute
+  '/versions': typeof AppVersionsRoute
   '/workspace': typeof AppWorkspaceRoute
   '/': typeof AppIndexRoute
 }
@@ -152,10 +216,18 @@ export interface FileRoutesById {
   '/verify-email': typeof VerifyEmailRoute
   '/_app/analytics': typeof AppAnalyticsRoute
   '/_app/architecture': typeof AppArchitectureRoute
+  '/_app/compare': typeof AppCompareRoute
+  '/_app/dependencies': typeof AppDependenciesRoute
   '/_app/documentation': typeof AppDocumentationRoute
+  '/_app/drift': typeof AppDriftRoute
   '/_app/exports': typeof AppExportsRoute
+  '/_app/playground': typeof AppPlaygroundRoute
   '/_app/repository': typeof AppRepositoryRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/_app/snapshots': typeof AppSnapshotsRoute
+  '/_app/story': typeof AppStoryRoute
+  '/_app/timeline': typeof AppTimelineRoute
+  '/_app/versions': typeof AppVersionsRoute
   '/_app/workspace': typeof AppWorkspaceRoute
   '/_app/': typeof AppIndexRoute
 }
@@ -172,10 +244,18 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/analytics'
     | '/architecture'
+    | '/compare'
+    | '/dependencies'
     | '/documentation'
+    | '/drift'
     | '/exports'
+    | '/playground'
     | '/repository'
     | '/settings'
+    | '/snapshots'
+    | '/story'
+    | '/timeline'
+    | '/versions'
     | '/workspace'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -188,10 +268,18 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/analytics'
     | '/architecture'
+    | '/compare'
+    | '/dependencies'
     | '/documentation'
+    | '/drift'
     | '/exports'
+    | '/playground'
     | '/repository'
     | '/settings'
+    | '/snapshots'
+    | '/story'
+    | '/timeline'
+    | '/versions'
     | '/workspace'
     | '/'
   id:
@@ -206,10 +294,18 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/_app/analytics'
     | '/_app/architecture'
+    | '/_app/compare'
+    | '/_app/dependencies'
     | '/_app/documentation'
+    | '/_app/drift'
     | '/_app/exports'
+    | '/_app/playground'
     | '/_app/repository'
     | '/_app/settings'
+    | '/_app/snapshots'
+    | '/_app/story'
+    | '/_app/timeline'
+    | '/_app/versions'
     | '/_app/workspace'
     | '/_app/'
   fileRoutesById: FileRoutesById
@@ -297,6 +393,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWorkspaceRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/versions': {
+      id: '/_app/versions'
+      path: '/versions'
+      fullPath: '/versions'
+      preLoaderRoute: typeof AppVersionsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/timeline': {
+      id: '/_app/timeline'
+      path: '/timeline'
+      fullPath: '/timeline'
+      preLoaderRoute: typeof AppTimelineRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/story': {
+      id: '/_app/story'
+      path: '/story'
+      fullPath: '/story'
+      preLoaderRoute: typeof AppStoryRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/snapshots': {
+      id: '/_app/snapshots'
+      path: '/snapshots'
+      fullPath: '/snapshots'
+      preLoaderRoute: typeof AppSnapshotsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/settings': {
       id: '/_app/settings'
       path: '/settings'
@@ -311,6 +435,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRepositoryRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/playground': {
+      id: '/_app/playground'
+      path: '/playground'
+      fullPath: '/playground'
+      preLoaderRoute: typeof AppPlaygroundRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/exports': {
       id: '/_app/exports'
       path: '/exports'
@@ -318,11 +449,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppExportsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/drift': {
+      id: '/_app/drift'
+      path: '/drift'
+      fullPath: '/drift'
+      preLoaderRoute: typeof AppDriftRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/documentation': {
       id: '/_app/documentation'
       path: '/documentation'
       fullPath: '/documentation'
       preLoaderRoute: typeof AppDocumentationRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/dependencies': {
+      id: '/_app/dependencies'
+      path: '/dependencies'
+      fullPath: '/dependencies'
+      preLoaderRoute: typeof AppDependenciesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/compare': {
+      id: '/_app/compare'
+      path: '/compare'
+      fullPath: '/compare'
+      preLoaderRoute: typeof AppCompareRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/architecture': {
@@ -345,10 +497,18 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppArchitectureRoute: typeof AppArchitectureRoute
+  AppCompareRoute: typeof AppCompareRoute
+  AppDependenciesRoute: typeof AppDependenciesRoute
   AppDocumentationRoute: typeof AppDocumentationRoute
+  AppDriftRoute: typeof AppDriftRoute
   AppExportsRoute: typeof AppExportsRoute
+  AppPlaygroundRoute: typeof AppPlaygroundRoute
   AppRepositoryRoute: typeof AppRepositoryRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppSnapshotsRoute: typeof AppSnapshotsRoute
+  AppStoryRoute: typeof AppStoryRoute
+  AppTimelineRoute: typeof AppTimelineRoute
+  AppVersionsRoute: typeof AppVersionsRoute
   AppWorkspaceRoute: typeof AppWorkspaceRoute
   AppIndexRoute: typeof AppIndexRoute
 }
@@ -356,10 +516,18 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAnalyticsRoute: AppAnalyticsRoute,
   AppArchitectureRoute: AppArchitectureRoute,
+  AppCompareRoute: AppCompareRoute,
+  AppDependenciesRoute: AppDependenciesRoute,
   AppDocumentationRoute: AppDocumentationRoute,
+  AppDriftRoute: AppDriftRoute,
   AppExportsRoute: AppExportsRoute,
+  AppPlaygroundRoute: AppPlaygroundRoute,
   AppRepositoryRoute: AppRepositoryRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppSnapshotsRoute: AppSnapshotsRoute,
+  AppStoryRoute: AppStoryRoute,
+  AppTimelineRoute: AppTimelineRoute,
+  AppVersionsRoute: AppVersionsRoute,
   AppWorkspaceRoute: AppWorkspaceRoute,
   AppIndexRoute: AppIndexRoute,
 }

@@ -19,6 +19,7 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
+import { Radar, GaugeCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -56,7 +57,9 @@ function Dashboard() {
       <div className="min-w-0 p-6 lg:p-8 space-y-8 border-r border-border">
         <TopBanner />
         <QuickStats />
+        <WorkspaceInsights />
         <RecentProjects />
+        <SmartDocs />
         <RecentActivity />
       </div>
       <RightSidebar />
@@ -414,5 +417,93 @@ function SectionHeader({ eyebrow, title, hint }: { eyebrow: string; title: strin
         {hint && <span className="text-[11px] font-mono text-muted-foreground">{hint}</span>}
       </div>
     </div>
+  );
+}
+
+/* ---------- workspace insights ---------- */
+
+const INSIGHTS = [
+  { icon: Radar, label: "Architecture drift", value: 8, unit: "%", tone: "warning" as const, hint: "3 missing, 2 extra" },
+  { icon: Wrench, label: "Technical debt", value: 14, unit: "d", tone: "warning" as const, hint: "engineer-days est." },
+  { icon: ShieldAlert, label: "Dependency risks", value: 5, unit: "", tone: "destructive" as const, hint: "1 high · 4 medium" },
+  { icon: Sparkles, label: "Open recommendations", value: 12, unit: "", tone: "info" as const, hint: "6 pinned" },
+  { icon: GaugeCircle, label: "Architecture complexity", value: 62, unit: "/100", tone: "info" as const, hint: "moderate" },
+  { icon: Shield, label: "Security posture", value: 88, unit: "/100", tone: "success" as const, hint: "stable 30d" },
+];
+
+function WorkspaceInsights() {
+  return (
+    <section>
+      <SectionHeader eyebrow="02" title="Workspace insights" hint="rolling · 24h" />
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        {INSIGHTS.map((w) => {
+          const Icon = w.icon;
+          const tone = w.tone === "success" ? "text-success"
+            : w.tone === "warning" ? "text-warning"
+            : w.tone === "destructive" ? "text-destructive"
+            : "text-info";
+          return (
+            <div key={w.label} className="surface-panel p-3.5 space-y-2">
+              <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+                <Icon className={"h-3.5 w-3.5 " + tone} />
+                {w.label}
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-display font-semibold tabular-nums">{w.value}</span>
+                <span className="text-xs font-mono text-muted-foreground">{w.unit}</span>
+              </div>
+              <div className="text-[11px] font-mono text-muted-foreground">{w.hint}</div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/* ---------- smart documentation status ---------- */
+
+type DocStatus = "up-to-date" | "outdated" | "updating";
+const DOCS: { name: string; status: DocStatus; updated: string }[] = [
+  { name: "README.md", status: "up-to-date", updated: "12m ago" },
+  { name: "Architecture Overview", status: "up-to-date", updated: "12m ago" },
+  { name: "API Reference", status: "updating", updated: "just now" },
+  { name: "Database Schema", status: "outdated", updated: "2d ago" },
+  { name: "Deployment Guide", status: "up-to-date", updated: "1h ago" },
+  { name: "Security Model", status: "outdated", updated: "4d ago" },
+  { name: "Version Notes v12", status: "updating", updated: "just now" },
+];
+
+function docBadge(s: DocStatus) {
+  const map = {
+    "up-to-date": { label: "Up-to-date", cls: "bg-success/10 text-success border-success/30", Icon: CheckCircle2 },
+    outdated: { label: "Outdated", cls: "bg-warning/10 text-warning border-warning/30", Icon: ShieldAlert },
+    updating: { label: "Updating", cls: "bg-info/10 text-info border-info/30", Icon: RefreshCw },
+  } as const;
+  const m = map[s];
+  const Icon = m.Icon;
+  return (
+    <span className={"inline-flex items-center gap-1.5 h-6 px-2 rounded border text-[11px] font-mono " + m.cls}>
+      <Icon className={"h-3 w-3 " + (s === "updating" ? "animate-spin" : "")} />
+      {m.label}
+    </span>
+  );
+}
+
+function SmartDocs() {
+  return (
+    <section>
+      <SectionHeader eyebrow="04" title="Smart documentation" hint="auto-sync with architecture" />
+      <div className="surface-panel divide-y divide-border">
+        {DOCS.map((d) => (
+          <div key={d.name} className="flex items-center gap-3 p-3">
+            <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-sm font-medium">{d.name}</span>
+            <span className="ml-auto font-mono text-[11px] text-muted-foreground">{d.updated}</span>
+            {docBadge(d.status)}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

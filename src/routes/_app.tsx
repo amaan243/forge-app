@@ -19,6 +19,14 @@ import {
   LogOut,
   Settings as SettingsIcon,
   Command as CommandIcon,
+  History,
+  GitCompare,
+  Radar,
+  Share2,
+  FlaskConical,
+  Activity as ActivityIcon,
+  Camera,
+  BookOpen,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CommandPalette } from "@/components/command-palette";
@@ -29,7 +37,23 @@ export const Route = createFileRoute("/_app")({
 });
 
 type NavItem = {
-  to: "/" | "/workspace" | "/architecture" | "/repository" | "/documentation" | "/analytics" | "/exports" | "/settings";
+  to:
+    | "/"
+    | "/workspace"
+    | "/architecture"
+    | "/repository"
+    | "/documentation"
+    | "/analytics"
+    | "/exports"
+    | "/settings"
+    | "/versions"
+    | "/compare"
+    | "/drift"
+    | "/dependencies"
+    | "/playground"
+    | "/timeline"
+    | "/snapshots"
+    | "/story";
   label: string;
   icon: typeof LayoutDashboard;
   exact?: boolean;
@@ -44,6 +68,17 @@ const NAV: NavItem[] = [
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/exports", label: "Exports", icon: Download },
   { to: "/settings", label: "Settings", icon: Settings },
+];
+
+const INTEL_NAV: NavItem[] = [
+  { to: "/playground", label: "Playground", icon: FlaskConical },
+  { to: "/versions", label: "Versions", icon: History },
+  { to: "/compare", label: "Compare", icon: GitCompare },
+  { to: "/drift", label: "Drift", icon: Radar },
+  { to: "/dependencies", label: "Dependencies", icon: Share2 },
+  { to: "/timeline", label: "Timeline", icon: ActivityIcon },
+  { to: "/snapshots", label: "Snapshots", icon: Camera },
+  { to: "/story", label: "Story", icon: BookOpen },
 ];
 
 function AppShell() {
@@ -76,6 +111,29 @@ function AppShell() {
           </div>
           {NAV.map((item) => {
             const active = item.exact ? pathname === item.to : pathname.startsWith(item.to);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={
+                  "flex items-center gap-2 h-8 px-2 rounded text-xs transition-colors " +
+                  (active
+                    ? "bg-surface text-foreground border border-border"
+                    : "text-muted-foreground hover:text-foreground hover:bg-surface/60 border border-transparent")
+                }
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{item.label}</span>
+                {active && <span className="ml-auto h-1 w-1 rounded-full bg-primary" />}
+              </Link>
+            );
+          })}
+          <div className="px-2 pt-4 pb-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+            Intelligence
+          </div>
+          {INTEL_NAV.map((item) => {
+            const active = pathname.startsWith(item.to);
             const Icon = item.icon;
             return (
               <Link
