@@ -22,6 +22,7 @@ import { Route as AppWorkspaceRouteImport } from './routes/_app.workspace'
 import { Route as AppVersionsRouteImport } from './routes/_app.versions'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppRepositoryRouteImport } from './routes/_app.repository'
+import { Route as AppPlaygroundRouteImport } from './routes/_app.playground'
 import { Route as AppExportsRouteImport } from './routes/_app.exports'
 import { Route as AppDriftRouteImport } from './routes/_app.drift'
 import { Route as AppDocumentationRouteImport } from './routes/_app.documentation'
@@ -94,6 +95,11 @@ const AppRepositoryRoute = AppRepositoryRouteImport.update({
   path: '/repository',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPlaygroundRoute = AppPlaygroundRouteImport.update({
+  id: '/playground',
+  path: '/playground',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppExportsRoute = AppExportsRouteImport.update({
   id: '/exports',
   path: '/exports',
@@ -146,6 +152,7 @@ export interface FileRoutesByFullPath {
   '/documentation': typeof AppDocumentationRoute
   '/drift': typeof AppDriftRoute
   '/exports': typeof AppExportsRoute
+  '/playground': typeof AppPlaygroundRoute
   '/repository': typeof AppRepositoryRoute
   '/settings': typeof AppSettingsRoute
   '/versions': typeof AppVersionsRoute
@@ -166,6 +173,7 @@ export interface FileRoutesByTo {
   '/documentation': typeof AppDocumentationRoute
   '/drift': typeof AppDriftRoute
   '/exports': typeof AppExportsRoute
+  '/playground': typeof AppPlaygroundRoute
   '/repository': typeof AppRepositoryRoute
   '/settings': typeof AppSettingsRoute
   '/versions': typeof AppVersionsRoute
@@ -189,6 +197,7 @@ export interface FileRoutesById {
   '/_app/documentation': typeof AppDocumentationRoute
   '/_app/drift': typeof AppDriftRoute
   '/_app/exports': typeof AppExportsRoute
+  '/_app/playground': typeof AppPlaygroundRoute
   '/_app/repository': typeof AppRepositoryRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/versions': typeof AppVersionsRoute
@@ -213,6 +222,7 @@ export interface FileRouteTypes {
     | '/documentation'
     | '/drift'
     | '/exports'
+    | '/playground'
     | '/repository'
     | '/settings'
     | '/versions'
@@ -233,6 +243,7 @@ export interface FileRouteTypes {
     | '/documentation'
     | '/drift'
     | '/exports'
+    | '/playground'
     | '/repository'
     | '/settings'
     | '/versions'
@@ -255,6 +266,7 @@ export interface FileRouteTypes {
     | '/_app/documentation'
     | '/_app/drift'
     | '/_app/exports'
+    | '/_app/playground'
     | '/_app/repository'
     | '/_app/settings'
     | '/_app/versions'
@@ -366,6 +378,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRepositoryRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/playground': {
+      id: '/_app/playground'
+      path: '/playground'
+      fullPath: '/playground'
+      preLoaderRoute: typeof AppPlaygroundRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/exports': {
       id: '/_app/exports'
       path: '/exports'
@@ -426,6 +445,7 @@ interface AppRouteChildren {
   AppDocumentationRoute: typeof AppDocumentationRoute
   AppDriftRoute: typeof AppDriftRoute
   AppExportsRoute: typeof AppExportsRoute
+  AppPlaygroundRoute: typeof AppPlaygroundRoute
   AppRepositoryRoute: typeof AppRepositoryRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppVersionsRoute: typeof AppVersionsRoute
@@ -441,6 +461,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDocumentationRoute: AppDocumentationRoute,
   AppDriftRoute: AppDriftRoute,
   AppExportsRoute: AppExportsRoute,
+  AppPlaygroundRoute: AppPlaygroundRoute,
   AppRepositoryRoute: AppRepositoryRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppVersionsRoute: AppVersionsRoute,
