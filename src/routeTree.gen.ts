@@ -24,6 +24,7 @@ import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppRepositoryRouteImport } from './routes/_app.repository'
 import { Route as AppExportsRouteImport } from './routes/_app.exports'
 import { Route as AppDocumentationRouteImport } from './routes/_app.documentation'
+import { Route as AppCompareRouteImport } from './routes/_app.compare'
 import { Route as AppArchitectureRouteImport } from './routes/_app.architecture'
 import { Route as AppAnalyticsRouteImport } from './routes/_app.analytics'
 
@@ -101,6 +102,11 @@ const AppDocumentationRoute = AppDocumentationRouteImport.update({
   path: '/documentation',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCompareRoute = AppCompareRouteImport.update({
+  id: '/compare',
+  path: '/compare',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppArchitectureRoute = AppArchitectureRouteImport.update({
   id: '/architecture',
   path: '/architecture',
@@ -123,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/verify-email': typeof VerifyEmailRoute
   '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
+  '/compare': typeof AppCompareRoute
   '/documentation': typeof AppDocumentationRoute
   '/exports': typeof AppExportsRoute
   '/repository': typeof AppRepositoryRoute
@@ -140,6 +147,7 @@ export interface FileRoutesByTo {
   '/verify-email': typeof VerifyEmailRoute
   '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
+  '/compare': typeof AppCompareRoute
   '/documentation': typeof AppDocumentationRoute
   '/exports': typeof AppExportsRoute
   '/repository': typeof AppRepositoryRoute
@@ -160,6 +168,7 @@ export interface FileRoutesById {
   '/verify-email': typeof VerifyEmailRoute
   '/_app/analytics': typeof AppAnalyticsRoute
   '/_app/architecture': typeof AppArchitectureRoute
+  '/_app/compare': typeof AppCompareRoute
   '/_app/documentation': typeof AppDocumentationRoute
   '/_app/exports': typeof AppExportsRoute
   '/_app/repository': typeof AppRepositoryRoute
@@ -181,6 +190,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/analytics'
     | '/architecture'
+    | '/compare'
     | '/documentation'
     | '/exports'
     | '/repository'
@@ -198,6 +208,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/analytics'
     | '/architecture'
+    | '/compare'
     | '/documentation'
     | '/exports'
     | '/repository'
@@ -217,6 +228,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/_app/analytics'
     | '/_app/architecture'
+    | '/_app/compare'
     | '/_app/documentation'
     | '/_app/exports'
     | '/_app/repository'
@@ -344,6 +356,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDocumentationRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/compare': {
+      id: '/_app/compare'
+      path: '/compare'
+      fullPath: '/compare'
+      preLoaderRoute: typeof AppCompareRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/architecture': {
       id: '/_app/architecture'
       path: '/architecture'
@@ -364,6 +383,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppArchitectureRoute: typeof AppArchitectureRoute
+  AppCompareRoute: typeof AppCompareRoute
   AppDocumentationRoute: typeof AppDocumentationRoute
   AppExportsRoute: typeof AppExportsRoute
   AppRepositoryRoute: typeof AppRepositoryRoute
@@ -376,6 +396,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAnalyticsRoute: AppAnalyticsRoute,
   AppArchitectureRoute: AppArchitectureRoute,
+  AppCompareRoute: AppCompareRoute,
   AppDocumentationRoute: AppDocumentationRoute,
   AppExportsRoute: AppExportsRoute,
   AppRepositoryRoute: AppRepositoryRoute,
