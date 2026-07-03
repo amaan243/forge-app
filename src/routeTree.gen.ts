@@ -23,6 +23,7 @@ import { Route as AppVersionsRouteImport } from './routes/_app.versions'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppRepositoryRouteImport } from './routes/_app.repository'
 import { Route as AppExportsRouteImport } from './routes/_app.exports'
+import { Route as AppDriftRouteImport } from './routes/_app.drift'
 import { Route as AppDocumentationRouteImport } from './routes/_app.documentation'
 import { Route as AppCompareRouteImport } from './routes/_app.compare'
 import { Route as AppArchitectureRouteImport } from './routes/_app.architecture'
@@ -97,6 +98,11 @@ const AppExportsRoute = AppExportsRouteImport.update({
   path: '/exports',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDriftRoute = AppDriftRouteImport.update({
+  id: '/drift',
+  path: '/drift',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDocumentationRoute = AppDocumentationRouteImport.update({
   id: '/documentation',
   path: '/documentation',
@@ -131,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/architecture': typeof AppArchitectureRoute
   '/compare': typeof AppCompareRoute
   '/documentation': typeof AppDocumentationRoute
+  '/drift': typeof AppDriftRoute
   '/exports': typeof AppExportsRoute
   '/repository': typeof AppRepositoryRoute
   '/settings': typeof AppSettingsRoute
@@ -149,6 +156,7 @@ export interface FileRoutesByTo {
   '/architecture': typeof AppArchitectureRoute
   '/compare': typeof AppCompareRoute
   '/documentation': typeof AppDocumentationRoute
+  '/drift': typeof AppDriftRoute
   '/exports': typeof AppExportsRoute
   '/repository': typeof AppRepositoryRoute
   '/settings': typeof AppSettingsRoute
@@ -170,6 +178,7 @@ export interface FileRoutesById {
   '/_app/architecture': typeof AppArchitectureRoute
   '/_app/compare': typeof AppCompareRoute
   '/_app/documentation': typeof AppDocumentationRoute
+  '/_app/drift': typeof AppDriftRoute
   '/_app/exports': typeof AppExportsRoute
   '/_app/repository': typeof AppRepositoryRoute
   '/_app/settings': typeof AppSettingsRoute
@@ -192,6 +201,7 @@ export interface FileRouteTypes {
     | '/architecture'
     | '/compare'
     | '/documentation'
+    | '/drift'
     | '/exports'
     | '/repository'
     | '/settings'
@@ -210,6 +220,7 @@ export interface FileRouteTypes {
     | '/architecture'
     | '/compare'
     | '/documentation'
+    | '/drift'
     | '/exports'
     | '/repository'
     | '/settings'
@@ -230,6 +241,7 @@ export interface FileRouteTypes {
     | '/_app/architecture'
     | '/_app/compare'
     | '/_app/documentation'
+    | '/_app/drift'
     | '/_app/exports'
     | '/_app/repository'
     | '/_app/settings'
@@ -349,6 +361,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppExportsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/drift': {
+      id: '/_app/drift'
+      path: '/drift'
+      fullPath: '/drift'
+      preLoaderRoute: typeof AppDriftRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/documentation': {
       id: '/_app/documentation'
       path: '/documentation'
@@ -385,6 +404,7 @@ interface AppRouteChildren {
   AppArchitectureRoute: typeof AppArchitectureRoute
   AppCompareRoute: typeof AppCompareRoute
   AppDocumentationRoute: typeof AppDocumentationRoute
+  AppDriftRoute: typeof AppDriftRoute
   AppExportsRoute: typeof AppExportsRoute
   AppRepositoryRoute: typeof AppRepositoryRoute
   AppSettingsRoute: typeof AppSettingsRoute
@@ -398,6 +418,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppArchitectureRoute: AppArchitectureRoute,
   AppCompareRoute: AppCompareRoute,
   AppDocumentationRoute: AppDocumentationRoute,
+  AppDriftRoute: AppDriftRoute,
   AppExportsRoute: AppExportsRoute,
   AppRepositoryRoute: AppRepositoryRoute,
   AppSettingsRoute: AppSettingsRoute,
