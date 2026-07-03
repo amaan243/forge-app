@@ -21,6 +21,7 @@ import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWorkspaceRouteImport } from './routes/_app.workspace'
 import { Route as AppVersionsRouteImport } from './routes/_app.versions'
 import { Route as AppTimelineRouteImport } from './routes/_app.timeline'
+import { Route as AppSnapshotsRouteImport } from './routes/_app.snapshots'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppRepositoryRouteImport } from './routes/_app.repository'
 import { Route as AppPlaygroundRouteImport } from './routes/_app.playground'
@@ -89,6 +90,11 @@ const AppVersionsRoute = AppVersionsRouteImport.update({
 const AppTimelineRoute = AppTimelineRouteImport.update({
   id: '/timeline',
   path: '/timeline',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSnapshotsRoute = AppSnapshotsRouteImport.update({
+  id: '/snapshots',
+  path: '/snapshots',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -161,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/playground': typeof AppPlaygroundRoute
   '/repository': typeof AppRepositoryRoute
   '/settings': typeof AppSettingsRoute
+  '/snapshots': typeof AppSnapshotsRoute
   '/timeline': typeof AppTimelineRoute
   '/versions': typeof AppVersionsRoute
   '/workspace': typeof AppWorkspaceRoute
@@ -183,6 +190,7 @@ export interface FileRoutesByTo {
   '/playground': typeof AppPlaygroundRoute
   '/repository': typeof AppRepositoryRoute
   '/settings': typeof AppSettingsRoute
+  '/snapshots': typeof AppSnapshotsRoute
   '/timeline': typeof AppTimelineRoute
   '/versions': typeof AppVersionsRoute
   '/workspace': typeof AppWorkspaceRoute
@@ -208,6 +216,7 @@ export interface FileRoutesById {
   '/_app/playground': typeof AppPlaygroundRoute
   '/_app/repository': typeof AppRepositoryRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/_app/snapshots': typeof AppSnapshotsRoute
   '/_app/timeline': typeof AppTimelineRoute
   '/_app/versions': typeof AppVersionsRoute
   '/_app/workspace': typeof AppWorkspaceRoute
@@ -234,6 +243,7 @@ export interface FileRouteTypes {
     | '/playground'
     | '/repository'
     | '/settings'
+    | '/snapshots'
     | '/timeline'
     | '/versions'
     | '/workspace'
@@ -256,6 +266,7 @@ export interface FileRouteTypes {
     | '/playground'
     | '/repository'
     | '/settings'
+    | '/snapshots'
     | '/timeline'
     | '/versions'
     | '/workspace'
@@ -280,6 +291,7 @@ export interface FileRouteTypes {
     | '/_app/playground'
     | '/_app/repository'
     | '/_app/settings'
+    | '/_app/snapshots'
     | '/_app/timeline'
     | '/_app/versions'
     | '/_app/workspace'
@@ -383,6 +395,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTimelineRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/snapshots': {
+      id: '/_app/snapshots'
+      path: '/snapshots'
+      fullPath: '/snapshots'
+      preLoaderRoute: typeof AppSnapshotsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/settings': {
       id: '/_app/settings'
       path: '/settings'
@@ -467,6 +486,7 @@ interface AppRouteChildren {
   AppPlaygroundRoute: typeof AppPlaygroundRoute
   AppRepositoryRoute: typeof AppRepositoryRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppSnapshotsRoute: typeof AppSnapshotsRoute
   AppTimelineRoute: typeof AppTimelineRoute
   AppVersionsRoute: typeof AppVersionsRoute
   AppWorkspaceRoute: typeof AppWorkspaceRoute
@@ -484,6 +504,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppPlaygroundRoute: AppPlaygroundRoute,
   AppRepositoryRoute: AppRepositoryRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppSnapshotsRoute: AppSnapshotsRoute,
   AppTimelineRoute: AppTimelineRoute,
   AppVersionsRoute: AppVersionsRoute,
   AppWorkspaceRoute: AppWorkspaceRoute,
