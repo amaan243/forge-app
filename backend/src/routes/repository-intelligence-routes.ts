@@ -1,0 +1,18 @@
+import { Router } from "express";
+import { requireAuth } from "../middleware/auth.js";
+import { requireProjectAdmin, requireProjectEditor, requireProjectMember } from "../middleware/project-auth.js";
+import { repositoryIntelligenceController } from "../controllers/repository-intelligence-controller.js";
+import rateLimit from "express-rate-limit";
+import { env } from "../config/env.js";
+export const repositoryIntelligenceRoutes = Router({ mergeParams: true });
+repositoryIntelligenceRoutes.use(requireAuth);
+const analysisLimit = rateLimit({ windowMs: env.RATE_LIMIT_WINDOW_MS, limit: 10, standardHeaders: "draft-8", legacyHeaders: false });
+repositoryIntelligenceRoutes.post("/repository/connect", requireProjectEditor, repositoryIntelligenceController.connect);
+repositoryIntelligenceRoutes.get("/repository", requireProjectMember, repositoryIntelligenceController.get);
+repositoryIntelligenceRoutes.delete("/repository", requireProjectAdmin, repositoryIntelligenceController.remove);
+repositoryIntelligenceRoutes.post("/repository/analyze", analysisLimit, requireProjectEditor, repositoryIntelligenceController.analyze);
+repositoryIntelligenceRoutes.get("/dependencies", requireProjectMember, repositoryIntelligenceController.dependencies);
+repositoryIntelligenceRoutes.post("/drift/analyze", requireProjectEditor, repositoryIntelligenceController.driftAnalyze);
+repositoryIntelligenceRoutes.get("/drift", requireProjectMember, repositoryIntelligenceController.drifts);
+repositoryIntelligenceRoutes.get("/drift/:analysisId", requireProjectMember, repositoryIntelligenceController.drift);
+repositoryIntelligenceRoutes.post("/drift/:analysisId/remediation", requireProjectEditor, repositoryIntelligenceController.remediation);

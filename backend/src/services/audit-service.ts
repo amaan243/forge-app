@@ -1,0 +1,2 @@
+import { platformRepository } from "../repositories/platform-operations-repository.js";
+export const auditService = { record(input: { workspaceId: string; projectId?: string; userId: string; action: string; entityType: string; entityId?: string; metadata?: Record<string, unknown> }) { return platformRepository.createAudit({ workspace_id: input.workspaceId, project_id: input.projectId, user_id: input.userId, action: input.action, entity_type: input.entityType, entity_id: input.entityId, metadata: input.metadata ?? {} }); } };

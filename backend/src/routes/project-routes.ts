@@ -1,0 +1,16 @@
+import { Router } from "express";
+import { requireAuth } from "../middleware/auth.js";
+import { requireProjectAdmin, requireProjectEditor, requireProjectMember } from "../middleware/project-auth.js";
+import { requireWorkspaceFromInput } from "../middleware/workspace-auth.js";
+import { projectController } from "../controllers/project-controller.js";
+export const projectRoutes = Router();
+projectRoutes.use(requireAuth);
+projectRoutes.post("/", requireWorkspaceFromInput, projectController.create);
+projectRoutes.get("/", requireWorkspaceFromInput, projectController.list);
+projectRoutes.get("/:projectId", requireProjectMember, projectController.get);
+projectRoutes.patch("/:projectId", requireProjectEditor, projectController.update);
+projectRoutes.delete("/:projectId", requireProjectAdmin, projectController.remove);
+projectRoutes.get("/:projectId/requirements", requireProjectMember, projectController.requirements);
+projectRoutes.post("/:projectId/requirements", requireProjectEditor, projectController.createRequirement);
+projectRoutes.patch("/:projectId/requirements/:requirementId", requireProjectEditor, projectController.updateRequirement);
+projectRoutes.delete("/:projectId/requirements/:requirementId", requireProjectEditor, projectController.removeRequirement);

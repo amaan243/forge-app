@@ -1,0 +1,3 @@
+import type { AIProvider } from "../integrations/ai-provider.js";
+export interface DriftRemediation { problem: string; root_cause: string; recommended_changes: string[]; affected_components: string[]; risk: string; implementation_steps: string[] }
+export class DriftRemediationService { constructor(private readonly provider: AIProvider) {} remediation(input: unknown): Promise<DriftRemediation> { return this.provider.structuredOutput<DriftRemediation>({ prompt: JSON.stringify(input), schema: "DriftRemediation" }); } }

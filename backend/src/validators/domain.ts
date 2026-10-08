@@ -1,0 +1,11 @@
+import { z } from "zod";
+import { memberParams, projectIdParams, requirementParams, slug, uuid, workspaceIdParams } from "./common.js";
+export const workspaceCreate = z.object({ name: z.string().trim().min(1).max(120), slug, description: z.string().max(1000).optional() });
+export const workspaceUpdate = workspaceCreate.partial();
+export const memberCreate = z.object({ user_id: uuid, role: z.enum(["admin", "member", "viewer"]).default("member") });
+export const memberUpdate = z.object({ role: z.enum(["admin", "member", "viewer"]) });
+export const projectCreate = z.object({ workspace_id: uuid, name: z.string().trim().min(1).max(120), slug, description: z.string().max(1000).optional(), visibility: z.enum(["private", "workspace"]).default("workspace") });
+export const projectUpdate = projectCreate.omit({ workspace_id: true }).partial().extend({ status: z.enum(["active", "archived"]).optional() });
+export const requirementCreate = z.object({ content: z.string().trim().min(1).max(100000) });
+export const requirementUpdate = requirementCreate;
+export { memberParams, projectIdParams, requirementParams, workspaceIdParams };

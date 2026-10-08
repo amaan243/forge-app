@@ -1,0 +1,11 @@
+import { Queue } from "bullmq";
+import { env } from "../config/env.js";
+const queueOptions = { connection: { url: env.REDIS_URL }, defaultJobOptions: { attempts: 3, backoff: { type: "exponential" as const, delay: 1000 }, removeOnComplete: 100, removeOnFail: 100 } };
+export const repositoryAnalysisQueue = new Queue("repository-analysis", queueOptions);
+export const dependencyAnalysisQueue = new Queue("dependency-analysis", queueOptions);
+export const driftAnalysisQueue = new Queue("drift-analysis", queueOptions);
+export const aiGenerationQueue = new Queue("ai-generation", queueOptions);
+export const documentationGenerationQueue = new Queue("documentation-generation", queueOptions);
+export const designReviewQueue = new Queue("design-review", queueOptions);
+export const storyGenerationQueue = new Queue("story-generation", queueOptions);
+export const exportGenerationQueue = new Queue("export-generation", queueOptions);

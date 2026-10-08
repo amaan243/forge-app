@@ -1,0 +1,8 @@
+export type ExportType = "architecture" | "documentation" | "project_story" | "dependency_graph" | "drift_report" | "version_comparison" | "full_project_report";
+export type ExportFormat = "json" | "markdown" | "pdf" | "svg" | "png";
+export type ExportStatus = "queued" | "running" | "completed" | "failed";
+export interface AnalyticsSnapshot { id: string; project_id: string; snapshot_date: string; metrics: Record<string, unknown>; created_at: string }
+export interface ProjectExport { id: string; project_id: string; type: ExportType; format: ExportFormat; status: ExportStatus; file_path: string | null; storage_path: string | null; metadata: Record<string, unknown>; requested_by: string; created_at: string; completed_at: string | null }
+export interface Notification { id: string; user_id: string; workspace_id: string; project_id: string | null; type: string; title: string; message: string; severity: "info" | "success" | "warning" | "error"; read: boolean; metadata: Record<string, unknown>; created_at: string }
+export interface AuditEvent { id: string; workspace_id: string; project_id: string | null; user_id: string; action: string; entity_type: string; entity_id: string | null; metadata: Record<string, unknown>; created_at: string }
+export interface UserSettings { user_id: string; theme: string; default_workspace: string | null; notifications: Record<string, unknown>; ai_preferences: Record<string, unknown>; editor_preferences: Record<string, unknown>; updated_at: string }

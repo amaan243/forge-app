@@ -1,0 +1,3 @@
+import type { RepositorySnapshot, RepositoryRecord } from "../types/repository-intelligence.js";
+export interface RepositoryConnectInput { url: string; branch?: string; accessType?: "public" | "private"; tokenReference?: string }
+export interface RepositoryProvider { readonly name: "github" | "gitlab" | "bitbucket"; connect(input: RepositoryConnectInput): Promise<RepositoryRecord>; fetchSnapshot(repository: RepositoryRecord): Promise<RepositorySnapshot>; }

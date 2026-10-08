@@ -1,0 +1,2 @@
+import { z } from "zod";
+export const profileUpdate = z.object({ full_name: z.string().max(120).nullable().optional(), avatar_url: z.string().url().nullable().optional(), username: z.string().regex(/^[a-zA-Z0-9_-]{2,40}$/).nullable().optional(), bio: z.string().max(1000).nullable().optional() }).strict();

@@ -1,0 +1,26 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - archforge-redis:/data
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - archforge-postgres:/var/lib/postgresql/data
+  backend:
+    build: .
+    env_file: .env
+    depends_on:
+      - redis
+    ports:
+      - "4000:4000"
+volumes:
+  archforge-redis:
+  archforge-postgres:

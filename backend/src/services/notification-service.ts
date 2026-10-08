@@ -1,0 +1,2 @@
+import { platformRepository } from "../repositories/platform-operations-repository.js";
+export const notificationService = { list(userId: string) { return platformRepository.notifications(userId); }, read(userId: string, id: string) { return platformRepository.markNotificationRead(userId, id); }, readAll(userId: string) { return platformRepository.markAllNotificationsRead(userId); }, notify(input: Record<string, unknown>) { return platformRepository.createNotification(input); } };

@@ -1,0 +1,3 @@
+import { z } from "zod";
+export const repositoryConnect = z.object({ repository_url: z.string().url().regex(/^https:\/\/(github\.com|gitlab\.com|bitbucket\.org)\//), branch: z.string().trim().min(1).max(255).default("main"), provider: z.enum(["github", "gitlab", "bitbucket"]), access_type: z.enum(["public", "private"]).default("public"), credential_reference: z.string().trim().min(1).max(255).optional() });
+export const dependencyQuery = z.object({ type: z.enum(["runtime", "development", "peer", "infrastructure"]).optional(), risk: z.enum(["low", "medium", "high", "critical"]).optional(), ecosystem: z.string().max(40).optional() });

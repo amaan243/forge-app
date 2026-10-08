@@ -1,0 +1,15 @@
+import { Router } from "express";
+import { requireAuth } from "../middleware/auth.js";
+import { requireWorkspaceAdmin, requireWorkspaceMember, requireWorkspaceOwner } from "../middleware/workspace-auth.js";
+import { workspaceController } from "../controllers/workspace-controller.js";
+export const workspaceRoutes = Router();
+workspaceRoutes.use(requireAuth);
+workspaceRoutes.post("/", workspaceController.create);
+workspaceRoutes.get("/", workspaceController.list);
+workspaceRoutes.get("/:workspaceId", requireWorkspaceMember, workspaceController.get);
+workspaceRoutes.patch("/:workspaceId", requireWorkspaceAdmin, workspaceController.update);
+workspaceRoutes.delete("/:workspaceId", requireWorkspaceOwner, workspaceController.remove);
+workspaceRoutes.get("/:workspaceId/members", requireWorkspaceMember, workspaceController.members);
+workspaceRoutes.post("/:workspaceId/members", requireWorkspaceAdmin, workspaceController.addMember);
+workspaceRoutes.patch("/:workspaceId/members/:memberId", requireWorkspaceAdmin, workspaceController.updateMember);
+workspaceRoutes.delete("/:workspaceId/members/:memberId", requireWorkspaceAdmin, workspaceController.removeMember);

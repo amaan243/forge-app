@@ -1,0 +1,2 @@
+import { platformRepository } from "../repositories/platform-operations-repository.js";
+export const settingsService = { async get(userId: string) { return (await platformRepository.settings(userId)) ?? platformRepository.updateSettings(userId, {}); }, update(userId: string, input: Record<string, unknown>) { return platformRepository.updateSettings(userId, input); } };
