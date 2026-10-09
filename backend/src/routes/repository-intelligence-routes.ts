@@ -18,4 +18,6 @@ repositoryIntelligenceRoutes.get("/dependencies", requireProjectMember, reposito
 repositoryIntelligenceRoutes.post("/drift/analyze", requireProjectEditor, repositoryIntelligenceController.driftAnalyze);
 repositoryIntelligenceRoutes.get("/drift", requireProjectMember, repositoryIntelligenceController.drifts);
 repositoryIntelligenceRoutes.get("/drift/:analysisId", requireProjectMember, repositoryIntelligenceController.drift);
+repositoryIntelligenceRoutes.get("/drift/:analysisId/findings", requireProjectMember, repositoryIntelligenceController.findings);
+repositoryIntelligenceRoutes.get("/drift/:analysisId/findings/:findingId", requireProjectMember, repositoryIntelligenceController.finding);
 repositoryIntelligenceRoutes.post("/drift/:analysisId/remediation", requireProjectEditor, repositoryIntelligenceController.remediation);

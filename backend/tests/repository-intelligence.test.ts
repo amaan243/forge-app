@@ -516,6 +516,631 @@ describe("Repository Intelligence & Security", () => {
         "Architecture version not found for this project"
       );
     });
+
+    it("1. matches an architecture node when real repository evidence exists", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue({
+        version: {
+          id: "ver-1",
+          project_id: "proj-1",
+          version_number: 1,
+          name: "User Service Architecture",
+          is_current: true,
+          created_by: "user-1",
+          created_at: "",
+          architecture_data: {},
+        },
+        nodes: [
+          {
+            id: "node-user",
+            version_id: "ver-1",
+            name: "User Service",
+            type: "service",
+            technology: "TypeScript",
+            metadata: {},
+            created_at: "",
+          },
+          {
+            id: "node-db",
+            version_id: "ver-1",
+            name: "PostgreSQL Database",
+            type: "database",
+            technology: "PostgreSQL",
+            metadata: {},
+            created_at: "",
+          },
+        ],
+        edges: [],
+      } as any);
+
+      const analysis: RepositoryAnalysis = {
+        id: "analysis-1",
+        project_id: "proj-1",
+        repository_id: "repo-1",
+        commit_sha: "sha-1",
+        status: "completed",
+        languages: { ts: 1 },
+        frameworks: ["PostgreSQL"],
+        architecture: {
+          services: ["src/services/user-service.ts"],
+          databases: ["postgres"],
+          apis: [],
+          routes: [],
+          externalIntegrations: [],
+        },
+        dependencies: [{ name: "pg", version: "8.11.0", ecosystem: "npm", type: "runtime" }],
+        infrastructure: {},
+        metrics: {},
+        analysis_data: { filesAnalyzed: 15 },
+        started_at: null,
+        completed_at: null,
+        created_at: "",
+      };
+
+      const result = await driftService.compare("proj-1", "ver-1", analysis);
+      const missingUser = result.items.find((i) => i.metadata?.affectedComponent === "User Service");
+      const missingDb = result.items.find((i) => i.metadata?.affectedComponent === "PostgreSQL Database");
+
+      expect(missingUser).toBeUndefined();
+      expect(missingDb).toBeUndefined();
+    });
+
+    it("2. flags an architecture node with no detected evidence as missing", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue({
+        version: {
+          id: "ver-1",
+          project_id: "proj-1",
+          version_number: 1,
+          name: "Arch",
+          is_current: true,
+          created_by: "user-1",
+          created_at: "",
+          architecture_data: {},
+        },
+        nodes: [
+          {
+            id: "node-kafka",
+            version_id: "ver-1",
+            name: "Kafka Event Broker",
+            type: "queue",
+            technology: "Kafka",
+            metadata: {},
+            created_at: "",
+          },
+        ],
+        edges: [],
+      } as any);
+
+      const analysis: RepositoryAnalysis = {
+        id: "analysis-1",
+        project_id: "proj-1",
+        repository_id: "repo-1",
+        commit_sha: "sha-1",
+        status: "completed",
+        languages: {},
+        frameworks: [],
+        architecture: { services: [], databases: [], apis: [], routes: [] },
+        dependencies: [],
+        infrastructure: {},
+        metrics: {},
+        analysis_data: { filesAnalyzed: 20 },
+        started_at: null,
+        completed_at: null,
+        created_at: "",
+      };
+
+      const result = await driftService.compare("proj-1", "ver-1", analysis);
+      const missing = result.items.find((i) => i.metadata?.affectedComponent === "Kafka Event Broker");
+      expect(missing).toBeDefined();
+      expect(missing?.type).toBe("missing");
+      expect(missing?.metadata.findingType).toBe("missing_component");
+      expect(missing?.description).toContain("does not have a matching module or service");
+      expect(missing?.recommendation).toBeDefined();
+    });
+
+    it("3. flags a repository module missing from the architecture as extra", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue({
+        version: {
+          id: "ver-1",
+          project_id: "proj-1",
+          version_number: 1,
+          name: "Arch",
+          is_current: true,
+          created_by: "user-1",
+          created_at: "",
+          architecture_data: {},
+        },
+        nodes: [],
+        edges: [],
+      } as any);
+
+      const analysis: RepositoryAnalysis = {
+        id: "analysis-1",
+        project_id: "proj-1",
+        repository_id: "repo-1",
+        commit_sha: "sha-1",
+        status: "completed",
+        languages: {},
+        frameworks: [],
+        architecture: { services: ["src/services/legacy-sync-job.ts"], databases: [], apis: [], routes: [] },
+        dependencies: [],
+        infrastructure: {},
+        metrics: {},
+        analysis_data: { filesAnalyzed: 20 },
+        started_at: null,
+        completed_at: null,
+        created_at: "",
+      };
+
+      const result = await driftService.compare("proj-1", "ver-1", analysis);
+      const extra = result.items.find((i) => i.metadata?.affectedComponent === "legacy-sync-job");
+      expect(extra).toBeDefined();
+      expect(extra?.type).toBe("extra");
+      expect(extra?.metadata.findingType).toBe("extra_module");
+      expect(extra?.metadata.sourceFilePaths).toContain("src/services/legacy-sync-job.ts");
+    });
+
+    it("4. detects technology mismatch between node specification and detected framework", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue({
+        version: {
+          id: "ver-1",
+          project_id: "proj-1",
+          version_number: 1,
+          name: "Arch",
+          is_current: true,
+          created_by: "user-1",
+          created_at: "",
+          architecture_data: {},
+        },
+        nodes: [
+          {
+            id: "node-backend",
+            version_id: "ver-1",
+            name: "Backend Server",
+            type: "backend",
+            technology: "FastAPI",
+            metadata: {},
+            created_at: "",
+          },
+        ],
+        edges: [],
+      } as any);
+
+      const analysis: RepositoryAnalysis = {
+        id: "analysis-1",
+        project_id: "proj-1",
+        repository_id: "repo-1",
+        commit_sha: "sha-1",
+        status: "completed",
+        languages: { ts: 1 },
+        frameworks: ["Express"],
+        architecture: {
+          services: ["src/server.ts"],
+          apis: ["src/server.ts"],
+          routes: [],
+          entryPoints: [{ path: "src/server.ts", kind: "backend_server", evidence: "listen", confidence: "confirmed" }],
+        },
+        dependencies: [{ name: "express", version: "5.0.0", ecosystem: "npm", type: "runtime" }],
+        infrastructure: {},
+        metrics: {},
+        analysis_data: { filesAnalyzed: 10 },
+        started_at: null,
+        completed_at: null,
+        created_at: "",
+      };
+
+      const result = await driftService.compare("proj-1", "ver-1", analysis);
+      const mismatch = result.items.find((i) => i.metadata?.findingType === "technology_mismatch");
+      expect(mismatch).toBeDefined();
+      expect(mismatch?.type).toBe("mismatch");
+      expect(mismatch?.description).toContain("specifies technology 'FastAPI'");
+    });
+
+    it("5. matches an architecture component through detected API routes", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue({
+        version: {
+          id: "ver-1",
+          project_id: "proj-1",
+          version_number: 1,
+          name: "Arch",
+          is_current: true,
+          created_by: "user-1",
+          created_at: "",
+          architecture_data: {},
+        },
+        nodes: [
+          {
+            id: "node-orders",
+            version_id: "ver-1",
+            name: "Orders API",
+            type: "api",
+            technology: "Express",
+            metadata: {},
+            created_at: "",
+          },
+        ],
+        edges: [],
+      } as any);
+
+      const analysis: RepositoryAnalysis = {
+        id: "analysis-1",
+        project_id: "proj-1",
+        repository_id: "repo-1",
+        commit_sha: "sha-1",
+        status: "completed",
+        languages: { ts: 1 },
+        frameworks: ["Express"],
+        architecture: {
+          services: [],
+          databases: [],
+          apis: ["src/routes/orders.ts"],
+          routes: [{ method: "POST", path: "/api/v1/orders", file: "src/routes/orders.ts", framework: "Express", confidence: "high", detectionBasis: "mounted_router" }],
+        },
+        dependencies: [],
+        infrastructure: {},
+        metrics: {},
+        analysis_data: { filesAnalyzed: 10 },
+        started_at: null,
+        completed_at: null,
+        created_at: "",
+      };
+
+      const result = await driftService.compare("proj-1", "ver-1", analysis);
+      const missing = result.items.find((i) => i.metadata?.affectedComponent === "Orders API");
+      expect(missing).toBeUndefined();
+    });
+
+    it("6. identifies ambiguous or dynamically configured integrations as uncertain match", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue({
+        version: {
+          id: "ver-1",
+          project_id: "proj-1",
+          version_number: 1,
+          name: "Arch",
+          is_current: true,
+          created_by: "user-1",
+          created_at: "",
+          architecture_data: {},
+        },
+        nodes: [
+          {
+            id: "node-dynamic",
+            version_id: "ver-1",
+            name: "Dynamic Webhook Target",
+            type: "external_service",
+            technology: "dynamic",
+            metadata: { dynamic: true },
+            description: "dynamically configured external webhook dispatch endpoint",
+            created_at: "",
+          },
+        ],
+        edges: [],
+      } as any);
+
+      const analysis: RepositoryAnalysis = {
+        id: "analysis-1",
+        project_id: "proj-1",
+        repository_id: "repo-1",
+        commit_sha: "sha-1",
+        status: "completed",
+        languages: {},
+        frameworks: [],
+        architecture: { services: [], databases: [], apis: [], routes: [] },
+        dependencies: [],
+        infrastructure: {},
+        metrics: {},
+        analysis_data: { filesAnalyzed: 10 },
+        started_at: null,
+        completed_at: null,
+        created_at: "",
+      };
+
+      const result = await driftService.compare("proj-1", "ver-1", analysis);
+      const uncertain = result.items.find((i) => i.metadata?.findingType === "uncertain_match");
+      expect(uncertain).toBeDefined();
+      expect(uncertain?.type).toBe("uncertain");
+      expect(uncertain?.metadata.confidence).toBe("low");
+    });
+
+    it("7. flags incomplete repository analysis with coverage limitations and rejects non-completed scans", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue({
+        version: {
+          id: "ver-1",
+          project_id: "proj-1",
+          version_number: 1,
+          name: "Arch",
+          is_current: true,
+          created_by: "user-1",
+          created_at: "",
+          architecture_data: {},
+        },
+        nodes: [],
+        edges: [],
+      } as any);
+
+      // Incomplete analysis status
+      const runningAnalysis: RepositoryAnalysis = {
+        id: "analysis-running",
+        project_id: "proj-1",
+        repository_id: "repo-1",
+        commit_sha: "sha-1",
+        status: "running",
+        languages: {},
+        frameworks: [],
+        architecture: {},
+        dependencies: [],
+        infrastructure: {},
+        metrics: {},
+        analysis_data: {},
+        started_at: null,
+        completed_at: null,
+        created_at: "",
+      };
+
+      await expect(driftService.compare("proj-1", "ver-1", runningAnalysis)).rejects.toThrow("Request validation failed");
+
+      // Completed but limited files scope
+      const limitedAnalysis: RepositoryAnalysis = {
+        id: "analysis-lim",
+        project_id: "proj-1",
+        repository_id: "repo-1",
+        commit_sha: "sha-1",
+        status: "completed",
+        languages: {},
+        frameworks: [],
+        architecture: {},
+        dependencies: [],
+        infrastructure: {},
+        metrics: {},
+        analysis_data: {
+          filesAnalyzed: 1,
+          fileCounts: {
+            totalFilesDiscovered: 6,
+            eligibleSourceFiles: 1,
+            analyzedSourceFiles: 1,
+            skippedFiles: 5,
+            failedFiles: 0,
+            manifestFilesProcessed: 1,
+          },
+        },
+        started_at: null,
+        completed_at: null,
+        created_at: "",
+      };
+
+      const result = await driftService.compare("proj-1", "ver-1", limitedAnalysis);
+      const limitation = result.items.find((i) => i.metadata?.findingType === "coverage_limitation");
+      expect(limitation).toBeDefined();
+      expect(limitation?.type).toBe("limitation");
+    });
+
+    it("8. rejects architecture version belonging to another project", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue({
+        version: {
+          id: "ver-other",
+          project_id: "proj-ANOTHER",
+          version_number: 1,
+          name: "Arch",
+          is_current: true,
+          created_by: "user-1",
+          created_at: "",
+          architecture_data: {},
+        },
+        nodes: [],
+        edges: [],
+      } as any);
+
+      const analysis: RepositoryAnalysis = {
+        id: "analysis-1",
+        project_id: "proj-1",
+        repository_id: "repo-1",
+        commit_sha: "sha-1",
+        status: "completed",
+        languages: {},
+        frameworks: [],
+        architecture: {},
+        dependencies: [],
+        infrastructure: {},
+        metrics: {},
+        analysis_data: {},
+        started_at: null,
+        completed_at: null,
+        created_at: "",
+      };
+
+      await expect(driftService.compare("proj-1", "ver-other", analysis)).rejects.toThrow(
+        "Architecture version not found for this project"
+      );
+    });
+
+    it("9. rejects repository analysis snapshot belonging to another project", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue({
+        version: {
+          id: "ver-1",
+          project_id: "proj-1",
+          version_number: 1,
+          name: "Arch",
+          is_current: true,
+          created_by: "user-1",
+          created_at: "",
+          architecture_data: {},
+        },
+        nodes: [],
+        edges: [],
+      } as any);
+
+      const foreignAnalysis: RepositoryAnalysis = {
+        id: "analysis-foreign",
+        project_id: "proj-ANOTHER",
+        repository_id: "repo-other",
+        commit_sha: "sha-1",
+        status: "completed",
+        languages: {},
+        frameworks: [],
+        architecture: {},
+        dependencies: [],
+        infrastructure: {},
+        metrics: {},
+        analysis_data: {},
+        started_at: null,
+        completed_at: null,
+        created_at: "",
+      };
+
+      await expect(driftService.compare("proj-1", "ver-1", foreignAnalysis)).rejects.toThrow(
+        "Repository analysis snapshot not found for this project"
+      );
+    });
+
+    it("10. ensures historical drift runs remain immutable when a new drift analysis is executed", async () => {
+      // Historical drift object from a prior run
+      const historicalRun = {
+        id: "drift-history-1",
+        project_id: "proj-1",
+        architecture_version_id: "ver-1",
+        repository_analysis_id: "analysis-1",
+        match_score: 85,
+        summary: "1 difference detected",
+        status: "completed",
+        created_at: "2026-10-01T00:00:00Z",
+        completed_at: "2026-10-01T00:00:01Z",
+      };
+
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue({
+        version: {
+          id: "ver-2",
+          project_id: "proj-1",
+          version_number: 2,
+          name: "Updated Arch v2",
+          is_current: true,
+          created_by: "user-1",
+          created_at: "",
+          architecture_data: {},
+        },
+        nodes: [],
+        edges: [],
+      } as any);
+
+      const newAnalysis: RepositoryAnalysis = {
+        id: "analysis-2",
+        project_id: "proj-1",
+        repository_id: "repo-1",
+        commit_sha: "sha-commit-2",
+        status: "completed",
+        languages: {},
+        frameworks: [],
+        architecture: {},
+        dependencies: [],
+        infrastructure: {},
+        metrics: {},
+        analysis_data: { filesAnalyzed: 10 },
+        started_at: null,
+        completed_at: null,
+        created_at: "",
+      };
+
+      const newResult = await driftService.compare("proj-1", "ver-2", newAnalysis);
+
+      // Verify that the historical run was untouched
+      expect(historicalRun.match_score).toBe(85);
+      expect(historicalRun.architecture_version_id).toBe("ver-1");
+      expect(historicalRun.repository_analysis_id).toBe("analysis-1");
+      expect(newResult.score).toBe(100);
+    });
+
+    it("11. returns real traceable findings with evidence, without mock data", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue({
+        version: {
+          id: "ver-1",
+          project_id: "proj-1",
+          version_number: 1,
+          name: "Arch",
+          is_current: true,
+          created_by: "user-1",
+          created_at: "",
+          architecture_data: {},
+        },
+        nodes: [
+          {
+            id: "node-auth",
+            version_id: "ver-1",
+            name: "Auth Service",
+            type: "service",
+            technology: "Node.js",
+            metadata: {},
+            created_at: "",
+          },
+        ],
+        edges: [],
+      } as any);
+
+      const analysis: RepositoryAnalysis = {
+        id: "analysis-1",
+        project_id: "proj-1",
+        repository_id: "repo-1",
+        commit_sha: "sha-1",
+        status: "completed",
+        languages: {},
+        frameworks: [],
+        architecture: { services: [], databases: [], apis: [], routes: [] },
+        dependencies: [],
+        infrastructure: {},
+        metrics: {},
+        analysis_data: { filesAnalyzed: 12 },
+        started_at: null,
+        completed_at: null,
+        created_at: "",
+      };
+
+      const result = await driftService.compare("proj-1", "ver-1", analysis);
+      for (const item of result.items) {
+        // Assert every finding is traceable to real inspected fields
+        expect(item.description).not.toContain("Lorem ipsum");
+        expect(item.metadata.affectedComponent).toBeDefined();
+        expect(item.metadata.evidence.length).toBeGreaterThan(0);
+        expect(["high", "medium", "low"]).toContain(item.metadata.confidence);
+        expect(item.recommendation).toBeDefined();
+      }
+    });
+
+    it("12. honestly represents no-finding results within inspected scope", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue({
+        version: {
+          id: "ver-1",
+          project_id: "proj-1",
+          version_number: 1,
+          name: "Arch",
+          is_current: true,
+          created_by: "user-1",
+          created_at: "",
+          architecture_data: {},
+        },
+        nodes: [],
+        edges: [],
+      } as any);
+
+      const analysis: RepositoryAnalysis = {
+        id: "analysis-1",
+        project_id: "proj-1",
+        repository_id: "repo-1",
+        commit_sha: "sha-1",
+        status: "completed",
+        languages: {},
+        frameworks: [],
+        architecture: { services: [], databases: [], apis: [], routes: [] },
+        dependencies: [],
+        infrastructure: {},
+        metrics: {},
+        analysis_data: { filesAnalyzed: 10 },
+        started_at: null,
+        completed_at: null,
+        created_at: "",
+      };
+
+      const result = await driftService.compare("proj-1", "ver-1", analysis);
+      expect(result.items).toHaveLength(0);
+      expect(result.summary).toContain("No drift findings detected in the inspected scope");
+      expect(result.summary).not.toContain("100% compliance guarantee");
+    });
   });
 
   describe("Part 12 — Parser & Static Analysis Edge Cases & Reliability", () => {

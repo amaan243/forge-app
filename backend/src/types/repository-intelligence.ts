@@ -3,7 +3,14 @@ export type RepositoryAccessType = "public" | "private";
 export type AnalysisStatus = "queued" | "running" | "completed" | "failed";
 export type DependencyType = "runtime" | "development" | "peer" | "infrastructure";
 export type RiskLevel = "low" | "medium" | "high" | "critical";
-export type DriftItemType = "missing" | "extra" | "mismatch";
+export type DriftItemType = "missing" | "extra" | "mismatch" | "uncertain" | "coverage_limitation" | "limitation" | "integration_mismatch";
+export type DriftFindingType =
+  | "missing_component"
+  | "extra_module"
+  | "technology_mismatch"
+  | "integration_mismatch"
+  | "uncertain_match"
+  | "coverage_limitation";
 export type DriftSeverity = "low" | "medium" | "high" | "critical";
 
 export interface RepositoryRecord {
@@ -205,27 +212,68 @@ export interface DependencyGraph {
   notice?: string;
 }
 
+export interface DriftCategoryCounts {
+  missing_component: number;
+  extra_module: number;
+  technology_mismatch: number;
+  integration_mismatch: number;
+  uncertain_match: number;
+  coverage_limitation: number;
+}
+
+export interface DriftSeverityCounts {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface DriftCounts {
+  total: number;
+  byCategory: DriftCategoryCounts;
+  bySeverity: DriftSeverityCounts;
+}
+
+export interface DriftFindingMetadata {
+  confidence: "high" | "medium" | "low";
+  evidence: string[];
+  affectedComponent: string;
+  affectedNodeId?: string;
+  findingType: DriftFindingType;
+  category: string;
+  title?: string;
+  sourceFilePaths?: string[];
+  relatedApiRoutes?: string[];
+  relatedDependencies?: string[];
+  confidenceReason?: string;
+  [key: string]: unknown;
+}
+
 export interface DriftAnalysis {
   id: string;
   project_id: string;
+  repository_id?: string | null;
   architecture_version_id: string;
   repository_analysis_id: string;
   match_score: number;
   summary: string;
   status: AnalysisStatus;
+  counts?: DriftCounts;
   created_at: string;
+  completed_at?: string | null;
+  drift_items?: DriftItem[];
 }
 
 export interface DriftItem {
-  id: string;
-  drift_analysis_id: string;
+  id?: string;
+  drift_analysis_id?: string;
   type: DriftItemType;
   severity: DriftSeverity;
   expected: Record<string, unknown>;
   actual: Record<string, unknown>;
   description: string;
   recommendation: string;
-  metadata: Record<string, unknown>;
+  metadata: DriftFindingMetadata;
 }
 
 export interface RepositoryAnalysisResult {

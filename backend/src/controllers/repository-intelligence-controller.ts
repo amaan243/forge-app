@@ -4,10 +4,12 @@ import { repositoryIntelligenceService } from "../services/repository-intelligen
 import {
   dependencyQuery,
   driftAnalyzeInput,
+  driftFilterQuery,
   repositoryAnalyzeTrigger,
   repositoryConnect,
 } from "../validators/repository-intelligence.js";
 import { repositoryIntelligenceRepository } from "../repositories/repository-intelligence-repository.js";
+import { architectureRepository } from "../repositories/architecture-repository.js";
 import { architectureService } from "../services/architecture-service.js";
 import { driftDetectionService } from "../services/drift-service.js";
 import { DriftRemediationService } from "../services/drift-remediation-service.js";
@@ -122,6 +124,9 @@ export const repositoryIntelligenceController = {
     let version;
     if (input.architecture_version_id) {
       version = await architectureService.getVersion(input.architecture_version_id);
+      if (!version || !version.version || version.version.project_id !== projectId) {
+        throw new NotFoundError("Architecture version not found for this project");
+      }
     } else {
       version = await architectureService.getCurrent(projectId);
     }
@@ -132,35 +137,84 @@ export const repositoryIntelligenceController = {
       });
     }
 
-    // 2. Resolve latest completed repository analysis
-    const analysis = await repositoryIntelligenceRepository.latestAnalysis(projectId);
+    // 2. Resolve selected or latest completed repository analysis
+    let analysis;
+    if (input.repository_analysis_id) {
+      analysis = await repositoryIntelligenceRepository.analysis(input.repository_analysis_id);
+      if (!analysis || analysis.project_id !== projectId) {
+        throw new NotFoundError("Repository analysis snapshot not found for this project");
+      }
+      if (analysis.status !== "completed") {
+        throw new ValidationError({
+          repository: "The selected repository analysis snapshot must be completed before drift detection.",
+        });
+      }
+    } else {
+      analysis = await repositoryIntelligenceRepository.latestSuccessful(projectId);
+      if (!analysis) {
+        analysis = await repositoryIntelligenceRepository.latestAnalysis(projectId);
+      }
+    }
+
     if (!analysis || analysis.status !== "completed") {
       throw new ValidationError({
         repository: "A completed repository analysis snapshot is required before drift detection. Please analyze your repository first.",
       });
     }
 
-    // 3. Deterministic drift detection
+    // 3. Resolve project repository reference
+    const repo = await repositoryIntelligenceRepository.repository(projectId);
+    const repositoryId = analysis.repository_id || repo?.id || null;
+
+    // 4. Deterministic drift detection
     const result = await driftDetectionService.compare(projectId, version.version.id, analysis);
 
-    // 4. Persist drift analysis and items
+    // 5. Persist drift analysis and items
     const drift = await repositoryIntelligenceRepository.createDrift({
       project_id: projectId,
+      repository_id: repositoryId,
       architecture_version_id: version.version.id,
       repository_analysis_id: analysis.id,
       match_score: result.score,
       summary: result.summary,
       status: "completed",
+      counts: result.counts,
+      completed_at: new Date().toISOString(),
     });
 
     await repositoryIntelligenceRepository.createDriftItems(
       result.items.map((item) => ({ ...item, drift_analysis_id: drift.id }))
     );
 
+    // 6. Record timeline / audit event if workspace project exists
+    try {
+      const project = (request as any).project;
+      const currentUserId = userId(request);
+      if (project && currentUserId) {
+        await architectureRepository.createTimelineEvent({
+          project_id: projectId,
+          workspace_id: project.workspace_id,
+          user_id: currentUserId,
+          event_type: "drift_analysis_completed",
+          entity_type: "drift_analysis",
+          entity_id: drift.id,
+          metadata: {
+            architecture_version_id: version.version.id,
+            repository_analysis_id: analysis.id,
+            match_score: result.score,
+            counts: result.counts,
+            summary: result.summary,
+          },
+        });
+      }
+    } catch (timelineErr) {
+      logger.warn("Failed to record timeline event for drift analysis:", timelineErr);
+    }
+
     response.status(201).json({
       success: true,
       message: "Drift analysis completed",
-      data: { ...drift, items: result.items },
+      data: { ...drift, items: result.items, counts: result.counts },
     });
   }) as RequestHandler,
 
@@ -175,6 +229,33 @@ export const repositoryIntelligenceController = {
       throw new NotFoundError("Drift analysis not found");
     }
     response.json({ success: true, message: "Drift analysis retrieved", data: drift });
+  }) as RequestHandler,
+
+  findings: (async (request, response) => {
+    const projectId = String(request.params.projectId);
+    const analysisId = String(request.params.analysisId);
+    const drift = await repositoryIntelligenceRepository.drift(analysisId);
+    if (!drift || drift.project_id !== projectId) {
+      throw new NotFoundError("Drift analysis not found");
+    }
+    const filters = driftFilterQuery.parse(request.query ?? {});
+    const findings = await repositoryIntelligenceRepository.driftFindings(analysisId, filters);
+    response.json({ success: true, message: "Drift findings retrieved", data: findings });
+  }) as RequestHandler,
+
+  finding: (async (request, response) => {
+    const projectId = String(request.params.projectId);
+    const analysisId = String(request.params.analysisId);
+    const findingId = String(request.params.findingId);
+    const drift = await repositoryIntelligenceRepository.drift(analysisId);
+    if (!drift || drift.project_id !== projectId) {
+      throw new NotFoundError("Drift analysis not found");
+    }
+    const finding = await repositoryIntelligenceRepository.driftFinding(analysisId, findingId);
+    if (!finding) {
+      throw new NotFoundError("Drift finding not found");
+    }
+    response.json({ success: true, message: "Drift finding retrieved", data: finding });
   }) as RequestHandler,
 
   remediation: (async (request, response) => {

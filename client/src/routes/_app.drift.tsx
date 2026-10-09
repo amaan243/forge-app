@@ -9,9 +9,19 @@ import {
   Loader2,
   FolderOpen,
   ArrowRight,
-  ShieldAlert,
   Info,
   RefreshCw,
+  History,
+  Filter,
+  Search,
+  FileCode,
+  ChevronDown,
+  ChevronRight,
+  ShieldAlert,
+  Database,
+  Layers,
+  HelpCircle,
+  Shield,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -22,12 +32,14 @@ import {
 } from "@/api/architecture";
 import {
   getRepositoryStatus,
+  getRepositoryAnalyses,
   getDriftAnalyses,
   getDriftAnalysis,
   runDriftAnalysis,
   type DriftAnalysis,
   type DriftItem,
   type RepositoryStatusResponse,
+  type RepositoryAnalysis,
 } from "@/api/repository";
 import { toast } from "sonner";
 
@@ -46,65 +58,113 @@ function DriftPage() {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
 
+  // Versions and Snapshots
   const [versions, setVersions] = useState<ArchitectureVersion[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string>("");
   const [repoStatus, setRepoStatus] = useState<RepositoryStatusResponse | null>(null);
-  const [latestDrift, setLatestDrift] = useState<(DriftAnalysis & { items?: DriftItem[] }) | null>(null);
+  const [snapshots, setSnapshots] = useState<RepositoryAnalysis[]>([]);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string>("");
+
+  // Drift Analysis & History
+  const [driftHistory, setDriftHistory] = useState<DriftAnalysis[]>([]);
+  const [selectedDriftId, setSelectedDriftId] = useState<string>("");
+  const [activeDrift, setActiveDrift] = useState<(DriftAnalysis & { items?: DriftItem[] }) | null>(null);
+
+  // Filter state
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [severityFilter, setSeverityFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!currentProject) return;
     setLoading(true);
     try {
-      // 1. Fetch architecture versions
+      // 1. Architecture versions
       const vers = await getArchitectureVersions(currentProject.id);
       setVersions(vers);
       if (vers.length > 0 && !selectedVersionId) {
         setSelectedVersionId(vers[0].id);
       }
 
-      // 2. Fetch repository status
+      // 2. Repository status & Snapshots
       const status = await getRepositoryStatus(currentProject.id);
       setRepoStatus(status);
 
-      // 3. Fetch drift analyses
+      const analysesList = await getRepositoryAnalyses(currentProject.id);
+      const completedList = analysesList.filter((a) => a.status === "completed");
+      setSnapshots(completedList);
+      if (completedList.length > 0 && !selectedSnapshotId) {
+        setSelectedSnapshotId(completedList[0].id);
+      } else if (status.latestAnalysis?.status === "completed" && !selectedSnapshotId) {
+        setSelectedSnapshotId(status.latestAnalysis.id);
+      }
+
+      // 3. Drift analyses history
       const drifts = await getDriftAnalyses(currentProject.id);
+      setDriftHistory(drifts);
       if (drifts.length > 0) {
-        const full = await getDriftAnalysis(currentProject.id, drifts[0].id);
-        setLatestDrift(full);
+        const targetId = selectedDriftId || drifts[0].id;
+        setSelectedDriftId(targetId);
+        const full = await getDriftAnalysis(currentProject.id, targetId);
+        setActiveDrift(full);
       } else {
-        setLatestDrift(null);
+        setActiveDrift(null);
       }
     } catch {
       // Handled by global client interceptor
     } finally {
       setLoading(false);
     }
-  }, [currentProject, selectedVersionId]);
+  }, [currentProject, selectedVersionId, selectedSnapshotId, selectedDriftId]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
+  // Load selected historical drift analysis
+  const handleSelectHistory = async (driftId: string) => {
+    if (!currentProject) return;
+    setSelectedDriftId(driftId);
+    setLoading(true);
+    try {
+      const full = await getDriftAnalysis(currentProject.id, driftId);
+      setActiveDrift(full);
+      // Synchronize version and snapshot selectors to match historical run
+      if (full.architecture_version_id) setSelectedVersionId(full.architecture_version_id);
+      if (full.repository_analysis_id) setSelectedSnapshotId(full.repository_analysis_id);
+    } catch {
+      toast.error("Failed to load historical drift analysis");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRunDrift = async () => {
     if (!currentProject) return;
-    if (!repoStatus?.latestAnalysis || repoStatus.latestAnalysis.status !== "completed") {
-      toast.error("Repository analysis required before running drift detection");
+    const effectiveSnapshotId = selectedSnapshotId || snapshots[0]?.id || repoStatus?.latestAnalysis?.id;
+    if (!effectiveSnapshotId) {
+      toast.error("Completed repository analysis snapshot required before running drift detection");
       return;
     }
-    if (!selectedVersionId && versions.length === 0) {
-      toast.error("Please create an architecture version first");
+    const effectiveVersionId = selectedVersionId || versions[0]?.id;
+    if (!effectiveVersionId && versions.length === 0) {
+      toast.error("Please create or save an architecture version first");
       return;
     }
 
     setAnalyzing(true);
     try {
       const result = await runDriftAnalysis(currentProject.id, {
-        architecture_version_id: selectedVersionId || versions[0]?.id,
+        architecture_version_id: effectiveVersionId,
+        repository_analysis_id: effectiveSnapshotId,
       });
-      setLatestDrift(result);
+      setActiveDrift(result);
+      setSelectedDriftId(result.id);
+      setDriftHistory((prev) => [result, ...prev.filter((d) => d.id !== result.id)]);
       toast.success("Architecture drift analysis completed!");
     } catch {
-      // Handled
+      // Handled by client interceptor
     } finally {
       setAnalyzing(false);
     }
@@ -114,16 +174,76 @@ function DriftPage() {
     return versions.find((v) => v.id === selectedVersionId) || versions[0] || null;
   }, [versions, selectedVersionId]);
 
+  const selectedSnapshot = useMemo(() => {
+    return snapshots.find((s) => s.id === selectedSnapshotId) || snapshots[0] || repoStatus?.latestAnalysis || null;
+  }, [snapshots, selectedSnapshotId, repoStatus]);
+
   const items = useMemo(() => {
-    return latestDrift?.drift_items || latestDrift?.items || [];
-  }, [latestDrift]);
+    return activeDrift?.drift_items || activeDrift?.items || [];
+  }, [activeDrift]);
 
-  const missingItems = useMemo(() => items.filter((i) => i.type === "missing"), [items]);
-  const extraItems = useMemo(() => items.filter((i) => i.type === "extra"), [items]);
-  const mismatchItems = useMemo(() => items.filter((i) => i.type === "mismatch"), [items]);
+  // Derived counts
+  const categoryCounts = useMemo(() => {
+    return {
+      missing: items.filter((i) => i.type === "missing" || i.metadata?.findingType === "missing_component").length,
+      extra: items.filter((i) => i.type === "extra" || i.metadata?.findingType === "extra_module").length,
+      technology_mismatch: items.filter(
+        (i) => i.metadata?.findingType === "technology_mismatch" || (i.type === "mismatch" && i.metadata?.category === "Technology")
+      ).length,
+      integration_mismatch: items.filter(
+        (i) => i.metadata?.findingType === "integration_mismatch" || i.type === "integration_mismatch"
+      ).length,
+      uncertain_match: items.filter(
+        (i) => i.metadata?.findingType === "uncertain_match" || i.type === "uncertain"
+      ).length,
+      coverage_limitation: items.filter(
+        (i) => i.metadata?.findingType === "coverage_limitation" || i.type === "limitation"
+      ).length,
+    };
+  }, [items]);
 
-  // Derive matches count from total expected elements minus differences
-  const score = latestDrift ? Number(latestDrift.match_score ?? 100) : 100;
+  const severityCounts = useMemo(() => {
+    return {
+      critical: items.filter((i) => i.severity === "critical").length,
+      high: items.filter((i) => i.severity === "high").length,
+      medium: items.filter((i) => i.severity === "medium").length,
+      low: items.filter((i) => i.severity === "low").length,
+    };
+  }, [items]);
+
+  // Filtered items list
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      // Category filter
+      if (categoryFilter !== "all") {
+        if (categoryFilter === "missing" && item.type !== "missing" && item.metadata?.findingType !== "missing_component") return false;
+        if (categoryFilter === "extra" && item.type !== "extra" && item.metadata?.findingType !== "extra_module") return false;
+        if (categoryFilter === "technology_mismatch" && item.metadata?.findingType !== "technology_mismatch") return false;
+        if (categoryFilter === "integration_mismatch" && item.metadata?.findingType !== "integration_mismatch" && item.type !== "integration_mismatch") return false;
+        if (categoryFilter === "uncertain_match" && item.metadata?.findingType !== "uncertain_match" && item.type !== "uncertain") return false;
+        if (categoryFilter === "coverage_limitation" && item.metadata?.findingType !== "coverage_limitation" && item.type !== "limitation") return false;
+      }
+      // Severity filter
+      if (severityFilter !== "all" && item.severity !== severityFilter) {
+        return false;
+      }
+      // Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const comp = (item.metadata?.affectedComponent || "").toLowerCase();
+        const desc = (item.description || "").toLowerCase();
+        const rec = (item.recommendation || "").toLowerCase();
+        const title = (item.metadata?.title || "").toLowerCase();
+        if (!comp.includes(q) && !desc.includes(q) && !rec.includes(q) && !title.includes(q)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [items, categoryFilter, severityFilter, searchQuery]);
+
+  const score = activeDrift ? Number(activeDrift.match_score ?? 100) : 100;
+  const isRepoAnalyzed = Boolean(snapshots.length > 0 || repoStatus?.latestAnalysis?.status === "completed");
 
   if (!currentProject) {
     return (
@@ -138,54 +258,82 @@ function DriftPage() {
     );
   }
 
-  if (loading && !latestDrift && !repoStatus) {
+  if (loading && !activeDrift && !repoStatus) {
     return (
       <div className="p-6 lg:p-8 space-y-6">
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading drift analysis...
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading drift analysis intelligence...
         </div>
       </div>
     );
   }
 
-  // Repository not connected or not analyzed state
-  const isRepoAnalyzed = repoStatus?.latestAnalysis?.status === "completed";
-
   return (
     <div className="p-6 lg:p-8 space-y-6">
+      {/* Page Header */}
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div className="space-y-1">
           <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <Radar className="h-3.5 w-3.5" /> Drift detection
+            <Radar className="h-3.5 w-3.5" /> Architecture Drift Intelligence
           </div>
           <h1 className="text-2xl font-display font-semibold tracking-tight">Generated vs Actual</h1>
           <p className="text-sm text-muted-foreground">
-            Reconciliation between saved architecture{" "}
+            Deterministic comparison between saved architecture{" "}
             <span className="font-mono text-foreground">
               {selectedVersion ? `v${selectedVersion.version_number} (${selectedVersion.name})` : "none"}
             </span>{" "}
-            and repository{" "}
+            and snapshot{" "}
+            <span className="font-mono text-foreground">
+              {selectedSnapshot ? `${selectedSnapshot.commit_sha?.substring(0, 7) || "latest"}` : "none"}
+            </span>{" "}
+            from{" "}
             <span className="font-mono text-foreground">
               {repoStatus?.repository ? `${repoStatus.repository.owner}/${repoStatus.repository.repository_name}` : "unconnected"}
             </span>.
           </p>
         </div>
 
+        {/* Action Controls & Selectors */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Version Selector */}
-          {versions.length > 0 && (
+          {/* Architecture Version Selector */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-mono uppercase text-muted-foreground">Version:</span>
             <select
               value={selectedVersionId}
               onChange={(e) => setSelectedVersionId(e.target.value)}
               className="h-8 rounded border border-input bg-background px-2 text-xs font-mono"
             >
-              {versions.map((v) => (
-                <option key={v.id} value={v.id}>
-                  v{v.version_number} · {v.name} ({v.status})
-                </option>
-              ))}
+              {versions.length > 0 ? (
+                versions.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    v{v.version_number} · {v.name} ({v.status})
+                  </option>
+                ))
+              ) : (
+                <option value="">No versions</option>
+              )}
             </select>
-          )}
+          </div>
+
+          {/* Repository Snapshot Selector */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-mono uppercase text-muted-foreground">Snapshot:</span>
+            <select
+              value={selectedSnapshotId}
+              onChange={(e) => setSelectedSnapshotId(e.target.value)}
+              className="h-8 rounded border border-input bg-background px-2 text-xs font-mono"
+            >
+              {snapshots.length > 0 ? (
+                snapshots.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    sha:{s.commit_sha?.substring(0, 7) || "HEAD"} · {new Date(s.created_at).toLocaleDateString()}
+                  </option>
+                ))
+              ) : (
+                <option value="">No snapshots</option>
+              )}
+            </select>
+          </div>
 
           <Button
             onClick={handleRunDrift}
@@ -194,7 +342,7 @@ function DriftPage() {
           >
             {analyzing ? (
               <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Detecting Drift...
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Comparing...
               </>
             ) : (
               <>
@@ -202,10 +350,19 @@ function DriftPage() {
               </>
             )}
           </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchData}
+            title="Refresh analysis data"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </header>
 
-      {/* Warning if repository not analyzed */}
+      {/* Warning: Repository Not Analyzed */}
       {!isRepoAnalyzed && (
         <div className="surface-panel p-6 border-warning/30 bg-warning/5 space-y-3">
           <div className="flex items-start gap-3">
@@ -223,7 +380,7 @@ function DriftPage() {
         </div>
       )}
 
-      {/* Warning if no architecture versions */}
+      {/* Warning: No Architecture Versions */}
       {versions.length === 0 && (
         <div className="surface-panel p-6 border-warning/30 bg-warning/5 space-y-3">
           <div className="flex items-start gap-3">
@@ -241,46 +398,172 @@ function DriftPage() {
         </div>
       )}
 
-      {/* If drift analysis results exist */}
-      {latestDrift ? (
+      {/* Results Section */}
+      {activeDrift ? (
         <>
+          {/* Top Score & Category Breakdown Cards */}
           <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
-            <ScoreCard score={score} timestamp={latestDrift.created_at} />
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <DriftStat icon={AlertTriangle} tone="warning" label="Missing" value={missingItems.length} />
-              <DriftStat icon={XCircle} tone="destructive" label="Extra" value={extraItems.length} />
-              <DriftStat icon={AlertTriangle} tone="warning" label="Mismatch" value={mismatchItems.length} />
-              <DriftStat
-                icon={CheckCircle2}
-                tone="success"
-                label="Compliance"
-                value={`${score}%`}
+            <ScoreCard
+              score={score}
+              timestamp={activeDrift.created_at}
+              status={activeDrift.status}
+              hasFindings={items.length > 0}
+            />
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
+              <CategoryStatCard
+                icon={AlertTriangle}
+                tone="warning"
+                label="Missing"
+                value={categoryCounts.missing}
+                active={categoryFilter === "missing"}
+                onClick={() => setCategoryFilter(categoryFilter === "missing" ? "all" : "missing")}
+              />
+              <CategoryStatCard
+                icon={XCircle}
+                tone="destructive"
+                label="Extra"
+                value={categoryCounts.extra}
+                active={categoryFilter === "extra"}
+                onClick={() => setCategoryFilter(categoryFilter === "extra" ? "all" : "extra")}
+              />
+              <CategoryStatCard
+                icon={Layers}
+                tone="warning"
+                label="Tech Mismatch"
+                value={categoryCounts.technology_mismatch}
+                active={categoryFilter === "technology_mismatch"}
+                onClick={() => setCategoryFilter(categoryFilter === "technology_mismatch" ? "all" : "technology_mismatch")}
+              />
+              <CategoryStatCard
+                icon={GitBranch}
+                tone="warning"
+                label="Integration"
+                value={categoryCounts.integration_mismatch}
+                active={categoryFilter === "integration_mismatch"}
+                onClick={() => setCategoryFilter(categoryFilter === "integration_mismatch" ? "all" : "integration_mismatch")}
+              />
+              <CategoryStatCard
+                icon={HelpCircle}
+                tone="neutral"
+                label="Uncertain"
+                value={categoryCounts.uncertain_match}
+                active={categoryFilter === "uncertain_match"}
+                onClick={() => setCategoryFilter(categoryFilter === "uncertain_match" ? "all" : "uncertain_match")}
+              />
+              <CategoryStatCard
+                icon={Info}
+                tone="neutral"
+                label="Limitations"
+                value={categoryCounts.coverage_limitation}
+                active={categoryFilter === "coverage_limitation"}
+                onClick={() => setCategoryFilter(categoryFilter === "coverage_limitation" ? "all" : "coverage_limitation")}
               />
             </div>
           </div>
 
-          {/* Reconciliation Report */}
+          {/* Severities Bar */}
+          <div className="surface-panel p-3 flex items-center justify-between gap-4 flex-wrap text-xs">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium text-foreground">Severity Breakdown:</span>
+            </div>
+            <div className="flex items-center gap-3 font-mono text-[11px]">
+              <span className="text-destructive font-semibold">Critical: {severityCounts.critical}</span>
+              <span className="text-warning font-semibold">High: {severityCounts.high}</span>
+              <span className="text-foreground">Medium: {severityCounts.medium}</span>
+              <span className="text-muted-foreground">Low: {severityCounts.low}</span>
+            </div>
+          </div>
+
+          {/* Reconciliation Report & Filter Bar */}
           <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-display font-semibold">Reconciliation Report</h2>
-              <span className="text-xs text-muted-foreground font-mono">
-                {items.length} difference{items.length === 1 ? "" : "s"} detected
-              </span>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-display font-semibold">Reconciliation Findings</h2>
+                <span className="text-xs text-muted-foreground font-mono">
+                  ({filteredItems.length} of {items.length} shown)
+                </span>
+              </div>
+
+              {/* Filters */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Search */}
+                <div className="relative">
+                  <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search findings..."
+                    className="h-8 rounded border border-input bg-background pl-8 pr-3 text-xs w-44"
+                  />
+                </div>
+
+                {/* Severity select */}
+                <select
+                  value={severityFilter}
+                  onChange={(e) => setSeverityFilter(e.target.value)}
+                  className="h-8 rounded border border-input bg-background px-2 text-xs font-mono"
+                >
+                  <option value="all">All Severities</option>
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+
+                {/* Reset Filters */}
+                {(categoryFilter !== "all" || severityFilter !== "all" || searchQuery) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs text-muted-foreground"
+                    onClick={() => {
+                      setCategoryFilter("all");
+                      setSeverityFilter("all");
+                      setSearchQuery("");
+                    }}
+                  >
+                    Reset Filters
+                  </Button>
+                )}
+              </div>
             </div>
 
+            {/* Findings List */}
             {items.length > 0 ? (
-              <div className="surface-panel divide-y divide-border">
-                {items.map((item, idx) => (
-                  <DriftItemRow key={item.id || idx} item={item} />
-                ))}
-              </div>
+              filteredItems.length > 0 ? (
+                <div className="surface-panel divide-y divide-border">
+                  {filteredItems.map((item, idx) => {
+                    const itemId = item.id || `item-${idx}`;
+                    const isExpanded = expandedItemId === itemId;
+                    return (
+                      <DriftItemRow
+                        key={itemId}
+                        item={item}
+                        isExpanded={isExpanded}
+                        onToggle={() => setExpandedItemId(isExpanded ? null : itemId)}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="surface-panel p-6 text-center text-xs text-muted-foreground">
+                  No findings match current filters.
+                </div>
+              )
             ) : (
-              <div className="surface-panel p-8 text-center space-y-2">
-                <CheckCircle2 className="h-8 w-8 text-success mx-auto" />
-                <h3 className="text-sm font-medium">100% Architecture Compliance</h3>
-                <p className="text-xs text-muted-foreground">
-                  All expected architecture components, services, and databases were confirmed in the repository.
+              /* Honest 0-findings state: explicit scope explanation */
+              <div className="surface-panel p-8 text-center space-y-3">
+                <CheckCircle2 className="h-8 w-8 text-primary mx-auto" />
+                <h3 className="text-base font-semibold">No drift findings detected in the inspected scope</h3>
+                <p className="text-xs text-muted-foreground max-w-lg mx-auto">
+                  All {selectedVersion?.nodes?.length ?? 0} architecture components and declared technologies were verified against detected repository modules, dependencies, and frameworks.
                 </p>
+                <div className="text-[11px] font-mono text-muted-foreground/80 bg-surface/50 p-2.5 rounded max-w-md mx-auto">
+                  Inspected static scope: {selectedSnapshot?.analysis_data?.filesAnalyzed ?? 0} files. Note: Static analysis verifies code structure and dependencies, not dynamic runtime behavior.
+                </div>
               </div>
             )}
           </section>
@@ -306,6 +589,61 @@ function DriftPage() {
               </div>
             </section>
           )}
+
+          {/* Drift Run History Section */}
+          {driftHistory.length > 0 && (
+            <section className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-display font-semibold">
+                  <History className="h-4 w-4 text-muted-foreground" /> Drift Run History
+                </div>
+                <span className="text-xs text-muted-foreground font-mono">
+                  {driftHistory.length} recorded run(s)
+                </span>
+              </div>
+
+              <div className="surface-panel divide-y divide-border">
+                {driftHistory.map((h) => {
+                  const isCurrent = h.id === activeDrift?.id;
+                  return (
+                    <div
+                      key={h.id}
+                      onClick={() => handleSelectHistory(h.id)}
+                      className={`p-3 flex items-center justify-between gap-4 text-xs cursor-pointer transition-colors ${
+                        isCurrent ? "bg-primary/5 font-medium" : "hover:bg-surface/50"
+                      }`}
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-medium text-foreground">
+                            Score: {Number(h.match_score ?? 100)}%
+                          </span>
+                          <span className="text-[10px] font-mono text-muted-foreground">
+                            · {new Date(h.created_at).toLocaleString()}
+                          </span>
+                          {isCurrent && (
+                            <span className="px-1.5 py-0.2 rounded bg-primary/10 text-primary text-[10px] font-mono uppercase">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground truncate max-w-xl">
+                          {h.summary}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          Status: {h.status}
+                        </span>
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
         </>
       ) : (
         isRepoAnalyzed &&
@@ -314,7 +652,7 @@ function DriftPage() {
             <Radar className="h-8 w-8 text-muted-foreground mx-auto" />
             <h3 className="text-sm font-medium">Ready for Drift Detection</h3>
             <p className="text-xs text-muted-foreground max-w-md mx-auto">
-              Your repository and architecture version are ready. Click "Run Drift Analysis" above to compare repository code against architecture version v{selectedVersion?.version_number}.
+              Your repository snapshot and architecture version are ready. Click "Run Drift Analysis" above to compare repository code against architecture version v{selectedVersion?.version_number}.
             </p>
           </div>
         )
@@ -323,7 +661,17 @@ function DriftPage() {
   );
 }
 
-function ScoreCard({ score, timestamp }: { score: number; timestamp?: string }) {
+function ScoreCard({
+  score,
+  timestamp,
+  status,
+  hasFindings,
+}: {
+  score: number;
+  timestamp?: string;
+  status: string;
+  hasFindings: boolean;
+}) {
   const r = 46;
   const c = 2 * Math.PI * r;
   const dash = c * (score / 100);
@@ -353,82 +701,184 @@ function ScoreCard({ score, timestamp }: { score: number; timestamp?: string }) 
         <div className="absolute inset-0 grid place-items-center">
           <div className="text-center">
             <div className="text-3xl font-display font-semibold tabular-nums">{score}%</div>
-            <div className="text-[10px] font-mono text-muted-foreground">match</div>
+            <div className="text-[10px] font-mono text-muted-foreground">
+              {hasFindings ? "match" : "aligned"}
+            </div>
           </div>
         </div>
       </div>
-      {timestamp && (
-        <div className="mt-3 text-[11px] font-mono text-muted-foreground">
-          Scan: {new Date(timestamp).toLocaleTimeString()}
+      <div className="mt-2 text-center">
+        <div className="text-[10px] font-mono text-muted-foreground">
+          Status: {status}
         </div>
-      )}
+        {timestamp && (
+          <div className="text-[10px] font-mono text-muted-foreground/80">
+            {new Date(timestamp).toLocaleTimeString()}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function DriftStat({
+function CategoryStatCard({
   icon: Icon,
   tone,
   label,
   value,
+  active,
+  onClick,
 }: {
   icon: typeof Radar;
-  tone: "success" | "warning" | "destructive";
+  tone: "warning" | "destructive" | "neutral";
   label: string;
-  value: number | string;
+  value: number;
+  active?: boolean;
+  onClick: () => void;
 }) {
-  const cls = tone === "success" ? "text-success" : tone === "warning" ? "text-warning" : "text-destructive";
+  const cls = tone === "destructive" ? "text-destructive" : tone === "warning" ? "text-warning" : "text-foreground";
   return (
-    <div className="surface-panel p-3.5">
-      <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-        <Icon className={"h-3.5 w-3.5 " + cls} />
-        {label}
+    <button
+      onClick={onClick}
+      className={`surface-panel p-3 text-left transition-all cursor-pointer ${
+        active ? "border-primary ring-1 ring-primary/40 bg-primary/5" : "hover:border-primary/40"
+      }`}
+    >
+      <div className="flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-wider text-muted-foreground truncate">
+        <Icon className={"h-3 w-3 shrink-0 " + cls} />
+        <span className="truncate">{label}</span>
       </div>
-      <div className="text-2xl font-display font-semibold tabular-nums mt-1">{value}</div>
-    </div>
+      <div className="text-xl font-display font-semibold tabular-nums mt-1">{value}</div>
+    </button>
   );
 }
 
-function DriftItemRow({ item }: { item: DriftItem }) {
-  const badgeMap = {
+function DriftItemRow({
+  item,
+  isExpanded,
+  onToggle,
+}: {
+  item: DriftItem;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const badgeMap: Record<string, { cls: string; label: string }> = {
     missing: { cls: "bg-warning/15 text-warning border-warning/30", label: "Missing" },
     extra: { cls: "bg-destructive/15 text-destructive border-destructive/30", label: "Extra" },
     mismatch: { cls: "bg-warning/15 text-warning border-warning/30", label: "Mismatch" },
-  } as const;
+    uncertain: { cls: "bg-surface text-muted-foreground border-border", label: "Uncertain" },
+    limitation: { cls: "bg-surface text-muted-foreground border-border", label: "Coverage" },
+    coverage_limitation: { cls: "bg-surface text-muted-foreground border-border", label: "Coverage" },
+    integration_mismatch: { cls: "bg-warning/15 text-warning border-warning/30", label: "Integration" },
+  };
 
-  const b = badgeMap[item.type] || { cls: "bg-muted text-muted-foreground border-border", label: item.type };
+  const b = badgeMap[item.type] || badgeMap[item.metadata?.findingType || ""] || {
+    cls: "bg-muted text-muted-foreground border-border",
+    label: item.type,
+  };
+
+  const title = item.metadata?.title || item.metadata?.affectedComponent || item.description;
 
   return (
-    <div className="p-3.5 space-y-1.5">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+    <div className="p-3.5 space-y-2">
+      <div
+        onClick={onToggle}
+        className="flex items-center justify-between gap-2 flex-wrap cursor-pointer select-none"
+      >
         <div className="flex items-center gap-2">
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+          )}
           <span className={"px-1.5 py-0.5 rounded border text-[10px] font-mono uppercase " + b.cls}>
             {b.label}
           </span>
-          <span className="text-xs font-semibold text-foreground">
-            {item.metadata?.affectedComponent || item.description}
-          </span>
+          <span className="text-xs font-semibold text-foreground">{title}</span>
           {item.metadata?.category && (
             <span className="text-[10px] font-mono uppercase text-muted-foreground">
               · {item.metadata.category}
             </span>
           )}
         </div>
+
         <div className="flex items-center gap-2 text-[10px] font-mono">
           <span className="text-muted-foreground">Severity: {item.severity}</span>
           <span className="text-muted-foreground">· Confidence: {item.metadata?.confidence || "medium"}</span>
         </div>
       </div>
 
-      <div className="text-xs text-muted-foreground">{item.description}</div>
+      <div className="text-xs text-muted-foreground pl-6">{item.description}</div>
 
-      {item.metadata?.evidence && item.metadata.evidence.length > 0 && (
-        <div className="text-[11px] font-mono text-muted-foreground/80 bg-surface/40 p-2 rounded">
-          Evidence: {item.metadata.evidence.join(" · ")}
+      {/* Expanded Evidence & Remediation Details */}
+      {isExpanded && (
+        <div className="pl-6 pt-1 space-y-2.5">
+          {/* Transparent Confidence Reason */}
+          {item.metadata?.confidenceReason && (
+            <div className="text-[11px] text-muted-foreground/90 bg-surface/50 p-2.5 rounded border border-border/50">
+              <span className="font-semibold text-foreground">Confidence basis:</span>{" "}
+              {item.metadata.confidenceReason}
+            </div>
+          )}
+
+          {/* Evidence List */}
+          {item.metadata?.evidence && item.metadata.evidence.length > 0 && (
+            <div className="text-[11px] font-mono text-muted-foreground bg-surface/60 p-2.5 rounded border border-border/60 space-y-1">
+              <div className="font-semibold text-foreground text-[10px] uppercase tracking-wider">
+                Supporting Evidence:
+              </div>
+              <ul className="list-disc list-inside space-y-0.5">
+                {item.metadata.evidence.map((ev, i) => (
+                  <li key={i}>{ev}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Source File Paths */}
+          {item.metadata?.sourceFilePaths && item.metadata.sourceFilePaths.length > 0 && (
+            <div className="text-[11px] font-mono text-muted-foreground bg-surface/40 p-2 rounded flex items-center gap-1.5 flex-wrap">
+              <FileCode className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span className="font-semibold text-foreground">Source Files:</span>
+              {item.metadata.sourceFilePaths.map((fp, i) => (
+                <span key={i} className="px-1.5 py-0.5 rounded bg-muted text-foreground">
+                  {fp}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Related API Routes */}
+          {item.metadata?.relatedApiRoutes && item.metadata.relatedApiRoutes.length > 0 && (
+            <div className="text-[11px] font-mono text-muted-foreground bg-surface/40 p-2 rounded space-y-1">
+              <span className="font-semibold text-foreground">Related Routes:</span>
+              <div className="flex gap-1.5 flex-wrap">
+                {item.metadata.relatedApiRoutes.map((rt, i) => (
+                  <span key={i} className="px-1.5 py-0.5 rounded bg-muted text-foreground">
+                    {rt}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Related Dependencies */}
+          {item.metadata?.relatedDependencies && item.metadata.relatedDependencies.length > 0 && (
+            <div className="text-[11px] font-mono text-muted-foreground bg-surface/40 p-2 rounded flex items-center gap-1.5 flex-wrap">
+              <Database className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span className="font-semibold text-foreground">Dependencies:</span>
+              {item.metadata.relatedDependencies.map((dp, i) => (
+                <span key={i} className="px-1.5 py-0.5 rounded bg-muted text-foreground">
+                  {dp}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      <div className="text-xs text-primary font-medium flex items-center gap-1.5 pt-0.5">
+      {/* Recommended Next Step */}
+      <div className="text-xs text-primary font-medium flex items-center gap-1.5 pt-0.5 pl-6">
         <ArrowRight className="h-3 w-3 shrink-0" /> {item.recommendation}
       </div>
     </div>

@@ -38,6 +38,8 @@ describe("API foundation", () => {
       "/api/v1/projects/00000000-0000-0000-0000-000000000001/documentation",
       "/api/v1/projects/00000000-0000-0000-0000-000000000001/story",
       "/api/v1/projects/00000000-0000-0000-0000-000000000001/insights",
+      "/api/v1/projects/00000000-0000-0000-0000-000000000001/drift",
+      "/api/v1/projects/00000000-0000-0000-0000-000000000001/drift/00000000-0000-0000-0000-000000000002/findings",
     ]) { const response = await request(app).get(path); expect(response.status).toBe(401); }
   });
 

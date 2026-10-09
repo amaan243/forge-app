@@ -26,4 +26,12 @@ export const dependencyQuery = z.object({
 
 export const driftAnalyzeInput = z.object({
   architecture_version_id: z.string().uuid("Invalid architecture version ID").optional(),
+  repository_analysis_id: z.string().uuid("Invalid repository analysis snapshot ID").optional(),
 });
+
+export const driftFilterQuery = z.object({
+  type: z.enum(["missing", "extra", "mismatch", "uncertain", "coverage_limitation", "limitation", "integration_mismatch"]).optional(),
+  category: z.string().max(50).optional(),
+  severity: z.enum(["low", "medium", "high", "critical"]).optional(),
+  confidence: z.enum(["high", "medium", "low"]).optional(),
+});
