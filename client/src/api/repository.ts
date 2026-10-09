@@ -227,10 +227,30 @@ export interface DriftSeverityCounts {
   low: number;
 }
 
+export interface DriftScoreBreakdown {
+  expectedComponents: number;
+  matchedComponents: number;
+  componentCoverageScore: number;
+  expectedConnections: number;
+  verifiedConnections: number;
+  connectionCoverageScore: number;
+  technologyCompatibilityScore: number;
+  expectedIntegrations: number;
+  verifiedIntegrations: number;
+  integrationCoverageScore: number;
+  extraModulesCount: number;
+  extraModulesPenalty: number;
+  analysisConfidence: "high" | "medium" | "low";
+  confidencePercentage: number;
+  finalScore: number;
+  explanation: string;
+}
+
 export interface DriftCounts {
   total: number;
   byCategory: DriftCategoryCounts;
   bySeverity: DriftSeverityCounts;
+  scoreBreakdown?: DriftScoreBreakdown;
 }
 
 export interface DriftItemMetadata {

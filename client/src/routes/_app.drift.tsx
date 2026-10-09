@@ -38,6 +38,7 @@ import {
   runDriftAnalysis,
   type DriftAnalysis,
   type DriftItem,
+  type DriftScoreBreakdown,
   type RepositoryStatusResponse,
   type RepositoryAnalysis,
 } from "@/api/repository";
@@ -408,6 +409,7 @@ function DriftPage() {
               timestamp={activeDrift.created_at}
               status={activeDrift.status}
               hasFindings={items.length > 0}
+              breakdown={activeDrift.counts?.scoreBreakdown}
             />
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
@@ -666,23 +668,31 @@ function ScoreCard({
   timestamp,
   status,
   hasFindings,
+  breakdown,
 }: {
   score: number;
   timestamp?: string;
   status: string;
   hasFindings: boolean;
+  breakdown?: DriftScoreBreakdown;
 }) {
   const r = 46;
   const c = 2 * Math.PI * r;
   const dash = c * (score / 100);
 
+  const confidenceBadge = breakdown?.analysisConfidence === "high"
+    ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
+    : breakdown?.analysisConfidence === "medium"
+    ? "bg-amber-500/10 text-amber-500 border-amber-500/30"
+    : "bg-muted text-muted-foreground border-border";
+
   return (
-    <div className="surface-panel p-4 flex flex-col items-center justify-center">
+    <div className="surface-panel p-4 flex flex-col items-center justify-between">
       <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-        Architecture Drift Score
+        Architecture Conformance
       </div>
-      <div className="relative mt-3">
-        <svg width="120" height="120" viewBox="0 0 120 120">
+      <div className="relative mt-2">
+        <svg width="110" height="110" viewBox="0 0 120 120">
           <circle cx="60" cy="60" r={r} fill="none" stroke="currentColor" className="text-border" strokeWidth="6" />
           <circle
             cx="60"
@@ -702,12 +712,55 @@ function ScoreCard({
           <div className="text-center">
             <div className="text-3xl font-display font-semibold tabular-nums">{score}%</div>
             <div className="text-[10px] font-mono text-muted-foreground">
-              {hasFindings ? "match" : "aligned"}
+              {hasFindings ? "conformance" : "aligned"}
             </div>
           </div>
         </div>
       </div>
-      <div className="mt-2 text-center">
+
+      {breakdown && (
+        <div className="w-full mt-3 pt-3 border-t border-border/50 space-y-2">
+          <div className="flex items-center justify-between text-[10px] font-mono">
+            <span className="text-muted-foreground">Scanner Confidence:</span>
+            <span className={`px-1.5 py-0.5 rounded border text-[10px] font-mono uppercase ${confidenceBadge}`}>
+              {breakdown.analysisConfidence} ({breakdown.confidencePercentage}%)
+            </span>
+          </div>
+
+          <div className="space-y-1.5 pt-1 text-[11px] font-mono">
+            <div className="flex justify-between items-center text-muted-foreground">
+              <span>Component (40%):</span>
+              <span className="text-foreground font-semibold">
+                {breakdown.componentCoverageScore}% ({breakdown.matchedComponents}/{breakdown.expectedComponents})
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-muted-foreground">
+              <span>Connection (25%):</span>
+              <span className="text-foreground font-semibold">
+                {breakdown.connectionCoverageScore}% ({breakdown.verifiedConnections}/{breakdown.expectedConnections})
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-muted-foreground">
+              <span>Tech Match (20%):</span>
+              <span className="text-foreground font-semibold">{breakdown.technologyCompatibilityScore}%</span>
+            </div>
+            <div className="flex justify-between items-center text-muted-foreground">
+              <span>Integration (15%):</span>
+              <span className="text-foreground font-semibold">
+                {breakdown.integrationCoverageScore}% ({breakdown.verifiedIntegrations}/{breakdown.expectedIntegrations})
+              </span>
+            </div>
+            {breakdown.extraModulesCount > 0 && (
+              <div className="flex justify-between items-center text-destructive">
+                <span>Extra Modules ({breakdown.extraModulesCount}):</span>
+                <span className="font-semibold">-{breakdown.extraModulesPenalty}%</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3 text-center border-t border-border/30 pt-2 w-full">
         <div className="text-[10px] font-mono text-muted-foreground">
           Status: {status}
         </div>

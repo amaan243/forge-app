@@ -4,6 +4,7 @@ import type {
   DriftCounts,
   DriftFindingMetadata,
   DriftItemType,
+  DriftScoreBreakdown,
   DriftSeverity,
   RepositoryAnalysis,
 } from "../types/repository-intelligence.js";
@@ -127,15 +128,26 @@ export class DriftDetectionService {
     // Helper to check if two strings share significant domain keywords
     const matchesDomainKeywords = (target: string, candidate: string): boolean => {
       const targetTokens = tokenize(target);
-      if (targetTokens.length === 0) {
-        // Fallback to exact normalized stem if no domain tokens remain
+      const candidateTokens = tokenize(candidate);
+      if (targetTokens.length === 0 || candidateTokens.length === 0) {
         const normT = normalize(target);
         const normC = normalize(candidate);
-        return normT.length >= 3 && normC.length >= 3 && (normT === normC);
+        return (
+          normT.length >= 3 &&
+          normC.length >= 3 &&
+          (normT === normC ||
+            (normT.length >= 4 && normC.startsWith(normT)) ||
+            (normC.length >= 4 && normT.startsWith(normC)))
+        );
       }
-      const candidateTokens = new Set(tokenize(candidate));
-      // Require at least one specific domain token match
-      return targetTokens.some((t) => candidateTokens.has(t));
+      return targetTokens.some((t) =>
+        candidateTokens.some((c) => {
+          if (t === c) return true;
+          const minLen = Math.min(t.length, c.length);
+          if (minLen >= 4 && (t.startsWith(c) || c.startsWith(t))) return true;
+          return false;
+        })
+      );
     };
 
     // Technology alignment helper
@@ -144,8 +156,28 @@ export class DriftDetectionService {
       const techKey = normalize(tech);
       if (!techKey) return true;
 
-      // 1. Check detected languages
-      const isLanguage = ["typescript", "ts", "javascript", "js", "python", "py", "go", "java", "rust", "rs", "ruby", "php"].includes(techKey);
+      // 1. Check Node.js runtime aliases
+      const isNode = ["node", "nodejs"].includes(techKey);
+      if (
+        isNode &&
+        (Boolean(analysis.languages?.javascript || analysis.languages?.typescript || analysis.languages?.js || analysis.languages?.ts) ||
+          actualFrameworks.some((f) => /express|nest|koa|fastify|next|nitro/i.test(f)))
+      ) {
+        return true;
+      }
+
+      // 2. Check Python runtime aliases
+      const isPython = ["python", "python3", "py"].includes(techKey);
+      if (
+        isPython &&
+        (Boolean(analysis.languages?.python || analysis.languages?.py) ||
+          actualFrameworks.some((f) => /fastapi|flask|django/i.test(f)))
+      ) {
+        return true;
+      }
+
+      // 3. Check detected languages
+      const isLanguage = ["typescript", "ts", "javascript", "js", "go", "java", "rust", "rs", "ruby", "php"].includes(techKey);
       if (
         isLanguage &&
         (Boolean(analysis.languages?.[techKey]) ||
@@ -155,7 +187,7 @@ export class DriftDetectionService {
         return true;
       }
 
-      // 2. Check frameworks
+      // 4. Check frameworks
       if (actualFrameworks.some((fw) => {
         const normFw = normalize(fw);
         return normFw === techKey || normFw.includes(techKey) || techKey.includes(normFw);
@@ -163,7 +195,7 @@ export class DriftDetectionService {
         return true;
       }
 
-      // 3. Check dependencies
+      // 5. Check dependencies
       return actualDependencies.some((dep) => {
         const normDep = normalize(dep.name);
         return normDep === techKey || normDep.includes(techKey) || techKey.includes(normDep);
@@ -361,11 +393,14 @@ export class DriftDetectionService {
           continue;
         }
 
-        // 1. Dependency matching for queues / storage / infrastructure (e.g. kafka, redis, rabbitmq)
-        const matchingQueueOrStorageDep = actualDependencies.find((d) => {
-          const normDep = normalize(d.name);
-          return (techKey && (normDep === techKey || normDep.includes(techKey))) || matchesDomainKeywords(node.name, d.name);
-        });
+        // 1. Dependency matching ONLY for queues / storage / infrastructure (e.g. kafka, redis, rabbitmq)
+        const isInfraNode = ["queue", "storage", "cache", "infrastructure", "monitoring"].includes(node.type);
+        const matchingQueueOrStorageDep = isInfraNode
+          ? actualDependencies.find((d) => {
+              const normDep = normalize(d.name);
+              return (techKey && (normDep === techKey || normDep.includes(techKey))) || matchesDomainKeywords(node.name, d.name);
+            })
+          : undefined;
 
         // 2. Specialized Authentication Component matching
         const isAuthNode = node.type === "auth" || nodeKey.includes("auth");
@@ -413,6 +448,12 @@ export class DriftDetectionService {
         if (isMatched) {
           if (matchedService) matchedServiceNames.add(matchedService);
           if (matchedApi) matchedServiceNames.add(matchedApi);
+          for (const s of actualServices) {
+            const sName = s.split("/").pop()?.replace(/\.[^/.]+$/, "") || s;
+            if (matchesDomainKeywords(node.name, sName)) {
+              matchedServiceNames.add(s);
+            }
+          }
           matchedNodeKeys.add(node.id);
 
           // Check for technology mismatch on matched component
@@ -475,15 +516,24 @@ export class DriftDetectionService {
     }
 
     // =========================================================================
-    // 4. Category: Architecture Edges & Integration Mismatches
+    // 4. Category: Architecture Edges & Connection Reconciliation
     // =========================================================================
+    let verifiedConnectionsCount = 0;
+    const totalExpectedConnections = intended.edges.length;
+
     for (const edge of intended.edges) {
       const sourceNode = nodeMapById.get(edge.source_node_id);
       const targetNode = nodeMapById.get(edge.target_node_id);
 
-      if (sourceNode && targetNode) {
-        // If target is external service and not matched
-        if (targetNode.type === "external_service" && !matchedNodeKeys.has(targetNode.id)) {
+      if (!sourceNode || !targetNode) continue;
+
+      let isEdgeVerified = false;
+
+      // Case 4.A: Target is an external service integration
+      if (targetNode.type === "external_service") {
+        if (matchedNodeKeys.has(sourceNode.id) && matchedNodeKeys.has(targetNode.id)) {
+          isEdgeVerified = true;
+        } else {
           const exists = items.some(
             (i) => i.metadata.affectedNodeId === targetNode.id && i.metadata.findingType === "integration_mismatch"
           );
@@ -514,6 +564,58 @@ export class DriftDetectionService {
               },
             });
           }
+        }
+      }
+      // Case 4.B: Source is Frontend and Target is Gateway/Backend/API
+      else if (sourceNode.type === "frontend" && (targetNode.type === "gateway" || targetNode.type === "backend" || targetNode.type === "api")) {
+        // Verified if both nodes matched and repository has API routes or entrypoints
+        if (matchedNodeKeys.has(sourceNode.id) && matchedNodeKeys.has(targetNode.id)) {
+          isEdgeVerified = actualRoutes.length > 0 || Boolean(actual.entryPoints && actual.entryPoints.length >= 2);
+        }
+      }
+      // Case 4.C: Target is a Database or Cache
+      else if (targetNode.type === "database" || targetNode.type === "cache") {
+        // Verified if target database matched and source service matched
+        if (matchedNodeKeys.has(sourceNode.id) && matchedNodeKeys.has(targetNode.id)) {
+          isEdgeVerified = actualDatabases.length > 0 || actualDependencies.some((d) => /postgres|mongo|mysql|sqlite|redis|prisma/i.test(d.name));
+        }
+      }
+      // Case 4.D: Internal Service to Service communication
+      else {
+        if (matchedNodeKeys.has(sourceNode.id) && matchedNodeKeys.has(targetNode.id)) {
+          // Verified if both domain components are confirmed and share routes or service files
+          isEdgeVerified = true;
+        }
+      }
+
+      if (isEdgeVerified) {
+        verifiedConnectionsCount++;
+      } else if (targetNode.type !== "external_service") {
+        // Missing internal connection finding if source or target was not satisfied or unverified
+        const findingExists = items.some((i) => i.metadata.affectedComponent === `${sourceNode.name} -> ${targetNode.name}`);
+        if (!findingExists && (!matchedNodeKeys.has(sourceNode.id) || !matchedNodeKeys.has(targetNode.id))) {
+          items.push({
+            type: "mismatch",
+            severity: "low",
+            expected: {
+              source: sourceNode.name,
+              target: targetNode.name,
+              relationship: edge.relationship,
+              protocol: edge.protocol,
+            },
+            actual: { verified: false },
+            description: `Declared architectural connection between '${sourceNode.name}' and '${targetNode.name}' cannot be verified because one or both endpoints are missing in code.`,
+            recommendation: `Implement endpoints and client connections between '${sourceNode.name}' and '${targetNode.name}'.`,
+            metadata: {
+              confidence: "medium",
+              evidence: [`Edge defined: ${sourceNode.name} -> ${targetNode.name}`],
+              affectedComponent: `${sourceNode.name} -> ${targetNode.name}`,
+              findingType: "integration_mismatch",
+              category: "Architecture Connection",
+              title: `Unverified connection: ${sourceNode.name} -> ${targetNode.name}`,
+              confidenceReason: "Endpoints missing or unverifiable in static code analysis.",
+            },
+          });
         }
       }
     }
@@ -623,7 +725,7 @@ export class DriftDetectionService {
     }
 
     // =========================================================================
-    // 8. Deterministic Counts & Transparent Score Calculation
+    // 8. Deterministic Counts & Transparent 4-Pillar Weighted Score Calculation
     // =========================================================================
     const counts: DriftCounts = {
       total: items.length,
@@ -643,59 +745,77 @@ export class DriftDetectionService {
       },
     };
 
-    // Total expected components in architecture
+    // Pillar 1: Expected Component Coverage (Weight: 40%)
     const totalExpectedComponents = intended.nodes.length;
     const matchedComponentsCount = matchedNodeKeys.size;
-
-    // Component coverage score (0 - 100)
     const componentCoverageScore = totalExpectedComponents > 0
       ? Math.round((matchedComponentsCount / totalExpectedComponents) * 100)
       : 100;
 
-    // Penalty deductions:
-    // Missing components: directly reduces coverage score proportionately
-    // Critical/High missing components apply a penalty of 15 each, medium 8 each (capped at 50)
-    const missingItems = items.filter((i) => i.metadata.findingType === "missing_component");
-    const missingComponentsPenalty = Math.min(
-      50,
-      missingItems.reduce((acc, i) => acc + (i.severity === "high" || i.severity === "critical" ? 15 : 8), 0)
-    );
+    // Pillar 2: Expected Connection Coverage (Weight: 25%)
+    const connectionCoverageScore = totalExpectedConnections > 0
+      ? Math.round((verifiedConnectionsCount / totalExpectedConnections) * 100)
+      : 100;
 
-    // Technology mismatches: 8 points per mismatch (capped at 25)
+    // Pillar 3: Technology & Role Compatibility (Weight: 20%)
     const techMismatchItems = items.filter((i) => i.metadata.findingType === "technology_mismatch");
-    const technologyMismatchPenalty = Math.min(
-      25,
-      techMismatchItems.reduce((acc, i) => acc + (i.severity === "high" ? 10 : 6), 0)
-    );
+    const techDeductions = techMismatchItems.reduce((acc, i) => acc + (i.severity === "high" ? 25 : 15), 0);
+    const technologyCompatibilityScore = Math.max(0, 100 - techDeductions);
 
-    // Integration & connection mismatches: 5 points per mismatch (capped at 15)
-    const integrationMismatchItems = items.filter((i) => i.metadata.findingType === "integration_mismatch");
-    const integrationMismatchPenalty = Math.min(15, integrationMismatchItems.length * 5);
+    // Pillar 4: External Integration Coverage (Weight: 15%)
+    const externalNodes = intended.nodes.filter((n) => n.type === "external_service");
+    const totalExpectedIntegrations = externalNodes.length;
+    const verifiedIntegrationsCount = externalNodes.filter((n) => matchedNodeKeys.has(n.id)).length;
+    const integrationCoverageScore = totalExpectedIntegrations > 0
+      ? Math.round((verifiedIntegrationsCount / totalExpectedIntegrations) * 100)
+      : 100;
 
-    // Extra modules penalty: 2 points per unexpected extra module (capped at 20)
-    // Extra modules can NEVER increase score because they are strictly subtracted from baseline coverage
-    const extraModulesPenalty = Math.min(20, counts.byCategory.extra_module * 2);
+    // Unmapped Extra Modules Penalty (Strict deduction: 3 pts each, capped at 25 pts)
+    // Extra modules strictly reduce the score and can NEVER increase it
+    const extraModulesPenalty = Math.min(25, counts.byCategory.extra_module * 3);
 
-    const totalPenalties =
-      technologyMismatchPenalty +
-      integrationMismatchPenalty +
-      extraModulesPenalty;
+    // Composite Architecture Conformance Score (0 - 100)
+    const weightedBase =
+      (componentCoverageScore * 0.40) +
+      (connectionCoverageScore * 0.25) +
+      (technologyCompatibilityScore * 0.20) +
+      (integrationCoverageScore * 0.15);
 
-    // Final score starts from component coverage score and subtracts penalty deductions
-    const rawScore = componentCoverageScore - totalPenalties;
+    const rawScore = weightedBase - extraModulesPenalty;
     const score = Math.max(0, Math.min(100, Math.round(rawScore)));
 
-    const scoreBreakdown = {
+    // Scanner Analysis Confidence calculation
+    let confidencePercentage = 50;
+    if (filesAnalyzed >= 10 && (actualRoutes.length > 0 || actualServices.length > 0)) {
+      confidencePercentage = 95;
+    } else if (filesAnalyzed >= 5) {
+      confidencePercentage = 75;
+    } else if (filesAnalyzed > 0) {
+      confidencePercentage = 40;
+    } else {
+      confidencePercentage = 10;
+    }
+
+    const analysisConfidence: "high" | "medium" | "low" =
+      confidencePercentage >= 80 ? "high" : confidencePercentage >= 50 ? "medium" : "low";
+
+    const scoreBreakdown: DriftScoreBreakdown = {
       expectedComponents: totalExpectedComponents,
       matchedComponents: matchedComponentsCount,
       componentCoverageScore,
-      missingComponentsPenalty,
-      technologyMismatchPenalty,
-      integrationMismatchPenalty,
+      expectedConnections: totalExpectedConnections,
+      verifiedConnections: verifiedConnectionsCount,
+      connectionCoverageScore,
+      technologyCompatibilityScore,
+      expectedIntegrations: totalExpectedIntegrations,
+      verifiedIntegrations: verifiedIntegrationsCount,
+      integrationCoverageScore,
+      extraModulesCount: counts.byCategory.extra_module,
       extraModulesPenalty,
-      totalPenalties,
+      analysisConfidence,
+      confidencePercentage,
       finalScore: score,
-      explanation: `Coverage (${componentCoverageScore}%) based on ${matchedComponentsCount}/${totalExpectedComponents} matched components minus penalties for tech mismatches (-${technologyMismatchPenalty}%), integrations (-${integrationMismatchPenalty}%), and extra modules (-${extraModulesPenalty}%).`,
+      explanation: `4-Pillar Score: Component Coverage (${componentCoverageScore}% × 40%), Connection Coverage (${connectionCoverageScore}% × 25%), Tech Compatibility (${technologyCompatibilityScore}% × 20%), Integration Coverage (${integrationCoverageScore}% × 15%) minus Extra Modules Penalty (-${extraModulesPenalty}%). Confidence: ${analysisConfidence} (${confidencePercentage}%).`,
     };
 
     counts.scoreBreakdown = scoreBreakdown;

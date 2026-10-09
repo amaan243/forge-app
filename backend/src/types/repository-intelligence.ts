@@ -232,11 +232,17 @@ export interface DriftScoreBreakdown {
   expectedComponents: number;
   matchedComponents: number;
   componentCoverageScore: number;
-  missingComponentsPenalty: number;
-  technologyMismatchPenalty: number;
-  integrationMismatchPenalty: number;
+  expectedConnections: number;
+  verifiedConnections: number;
+  connectionCoverageScore: number;
+  technologyCompatibilityScore: number;
+  expectedIntegrations: number;
+  verifiedIntegrations: number;
+  integrationCoverageScore: number;
+  extraModulesCount: number;
   extraModulesPenalty: number;
-  totalPenalties: number;
+  analysisConfidence: "high" | "medium" | "low";
+  confidencePercentage: number;
   finalScore: number;
   explanation: string;
 }

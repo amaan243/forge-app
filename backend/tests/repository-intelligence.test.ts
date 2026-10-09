@@ -1371,4 +1371,462 @@ describe("Repository Intelligence & Security", () => {
       expect(malformedResult.analysisData.fileCounts.totalFilesDiscovered).toBe(2);
     });
   });
+
+  describe("Architecture Drift Intelligence: Complete Audit, Fix & Validation (Tests A - L)", () => {
+    const driftService = new DriftDetectionService();
+
+    const chatAppArchitecture = (projectId: string) => ({
+      version: {
+        id: "version-chat-v8",
+        project_id: projectId,
+        version_number: 8,
+        name: "Chat-App Architecture",
+        architecture_data: {
+          technologies: ["React", "Express", "PostgreSQL"],
+        },
+      },
+      nodes: [
+        { id: "node-fe", name: "Web Application", type: "frontend", technology: "React" },
+        { id: "node-gw", name: "API Gateway", type: "gateway", technology: "Express" },
+        { id: "node-auth", name: "Authentication Service", type: "auth", technology: "Node.js" },
+        { id: "node-chat", name: "Chat Service", type: "service", technology: "Node.js" },
+        { id: "node-db", name: "User Database", type: "database", technology: "PostgreSQL" },
+        { id: "node-email", name: "Email Provider", type: "external_service", technology: "SendGrid" },
+      ],
+      edges: [
+        { id: "edge-1", source_node_id: "node-fe", target_node_id: "node-gw", relationship: "calls", protocol: "HTTP" },
+        { id: "edge-2", source_node_id: "node-gw", target_node_id: "node-auth", relationship: "calls", protocol: "HTTP" },
+        { id: "edge-3", source_node_id: "node-gw", target_node_id: "node-chat", relationship: "calls", protocol: "WebSocket" },
+        { id: "edge-4", source_node_id: "node-chat", target_node_id: "node-db", relationship: "stores", protocol: "TCP" },
+        { id: "edge-5", source_node_id: "node-auth", target_node_id: "node-email", relationship: "notifies", protocol: "HTTPS" },
+      ],
+    });
+
+    const resumeBuilderArchitecture = (projectId: string) => ({
+      version: {
+        id: "version-resume-v1",
+        project_id: projectId,
+        version_number: 1,
+        name: "Resume Builder Architecture",
+        architecture_data: {
+          technologies: ["React", "Express", "FastAPI", "MongoDB"],
+        },
+      },
+      nodes: [
+        { id: "rb-fe", name: "Resume Client", type: "frontend", technology: "React" },
+        { id: "rb-api", name: "Resume API", type: "gateway", technology: "Express" },
+        { id: "rb-eval", name: "Interview Evaluator", type: "service", technology: "Node.js" },
+        { id: "rb-ml", name: "ML Predictor", type: "service", technology: "FastAPI" },
+        { id: "rb-db", name: "Resume Database", type: "database", technology: "MongoDB" },
+      ],
+      edges: [
+        { id: "rb-e1", source_node_id: "rb-fe", target_node_id: "rb-api", relationship: "calls", protocol: "HTTP" },
+        { id: "rb-e2", source_node_id: "rb-api", target_node_id: "rb-eval", relationship: "calls", protocol: "HTTP" },
+        { id: "rb-e3", source_node_id: "rb-api", target_node_id: "rb-ml", relationship: "calls", protocol: "HTTP" },
+        { id: "rb-e4", source_node_id: "rb-api", target_node_id: "rb-db", relationship: "stores", protocol: "TCP" },
+      ],
+    });
+
+    const createChatAppAnalysis = (projectId: string, commitSha = "sha-chat-1"): RepositoryAnalysis => ({
+      id: "analysis-chat-1",
+      repository_id: "repo-chat",
+      project_id: projectId,
+      commit_sha: commitSha,
+      status: "completed",
+      frameworks: ["React", "Express"],
+      languages: { javascript: 10, typescript: 5 },
+      dependencies: [
+        { name: "react", version: "^18.2.0", ecosystem: "npm", type: "production" },
+        { name: "express", version: "^4.18.2", ecosystem: "npm", type: "production" },
+        { name: "jsonwebtoken", version: "^9.0.0", ecosystem: "npm", type: "production" },
+        { name: "pg", version: "^8.11.0", ecosystem: "npm", type: "production" },
+        { name: "sendgrid", version: "^7.7.0", ecosystem: "npm", type: "production" },
+      ],
+      infrastructure: {},
+      architecture: {
+        technologies: ["React", "Express"],
+        services: ["src/services/chat-service.ts", "src/services/auth-service.ts"],
+        databases: ["PostgreSQL"],
+        apis: ["src/routes/chat.ts", "src/routes/auth.ts"],
+        routes: [
+          { method: "POST", path: "/api/auth/login", framework: "Express", detectionBasis: "direct_app_route", confidence: "high", file: "src/routes/auth.ts" },
+          { method: "GET", path: "/api/chat/messages", framework: "Express", detectionBasis: "direct_app_route", confidence: "high", file: "src/routes/chat.ts" },
+        ],
+        entryPoints: [
+          { path: "src/main.jsx", kind: "frontend_app", evidence: "ReactDOM.render", confidence: "confirmed" },
+          { path: "src/server.ts", kind: "backend_server", evidence: "app.listen", confidence: "confirmed" },
+        ],
+        authentication: true,
+        externalIntegrations: ["SendGrid"],
+      },
+      metrics: { fileCount: 20 },
+      analysis_data: {
+        filesAnalyzed: 20,
+        fileCounts: { totalFilesDiscovered: 20, eligibleSourceFiles: 20, analyzedSourceFiles: 20, skippedFiles: 0, failedFiles: 0, manifestFilesProcessed: 1 },
+      },
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    });
+
+    const createResumeBuilderAnalysis = (projectId: string, commitSha = "sha-resume-1"): RepositoryAnalysis => ({
+      id: "analysis-resume-1",
+      repository_id: "repo-resume",
+      project_id: projectId,
+      commit_sha: commitSha,
+      status: "completed",
+      frameworks: ["React", "Express", "FastAPI"],
+      languages: { javascript: 15, python: 8 },
+      dependencies: [
+        { name: "react", version: "^18.2.0", ecosystem: "npm", type: "production" },
+        { name: "express", version: "^4.18.2", ecosystem: "npm", type: "production" },
+        { name: "mongoose", version: "^7.0.0", ecosystem: "npm", type: "production" },
+        { name: "fastapi", version: "^0.100.0", ecosystem: "pypi", type: "production" },
+      ],
+      infrastructure: {},
+      architecture: {
+        technologies: ["React", "Express", "FastAPI"],
+        services: [
+          "src/services/resume-builder.js",
+          "src/services/interview-evaluator.js",
+          "src/services/score-calculator.js",
+          "ml_api.py",
+        ],
+        databases: ["MongoDB"],
+        apis: ["src/routes/resume.js", "src/routes/interview.js"],
+        routes: [
+          { method: "POST", path: "/api/resume/upload", framework: "Express", detectionBasis: "direct_app_route", confidence: "high", file: "src/routes/resume.js" },
+          { method: "POST", path: "/api/interview/evaluate", framework: "Express", detectionBasis: "direct_app_route", confidence: "high", file: "src/routes/interview.js" },
+          { method: "POST", path: "/predict", framework: "FastAPI", detectionBasis: "decorator", confidence: "high", file: "ml_api.py" },
+        ],
+        entryPoints: [
+          { path: "src/main.jsx", kind: "frontend_app", evidence: "ReactDOM.render", confidence: "confirmed" },
+          { path: "src/server.js", kind: "backend_server", evidence: "app.listen", confidence: "confirmed" },
+        ],
+        authentication: false,
+        externalIntegrations: [],
+      },
+      metrics: { fileCount: 25 },
+      analysis_data: {
+        filesAnalyzed: 25,
+        fileCounts: { totalFilesDiscovered: 25, eligibleSourceFiles: 25, analyzedSourceFiles: 25, skippedFiles: 0, failedFiles: 0, manifestFilesProcessed: 1 },
+      },
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    });
+
+    it("Test A — Matching application: Chat-App architecture against matching repository yields high conformance score with evidence-backed matches", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue(chatAppArchitecture("p1") as any);
+      const analysis = createChatAppAnalysis("p1");
+
+      const result = await driftService.compare("p1", "version-chat-v8", analysis);
+
+      expect(result.score).toBeGreaterThanOrEqual(80);
+      expect(result.counts.byCategory.missing_component).toBe(0);
+      expect(result.counts.scoreBreakdown?.componentCoverageScore).toBe(100);
+      expect(result.counts.scoreBreakdown?.connectionCoverageScore).toBe(100);
+      expect(result.counts.scoreBreakdown?.analysisConfidence).toBe("high");
+      expect(result.items.some((i) => i.type === "missing")).toBe(false);
+    });
+
+    it("Test B — Unrelated applications: Chat-App architecture vs Resume Builder repository yields low conformance score with specific mismatches", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue(chatAppArchitecture("p1") as any);
+      const resumeAnalysis = createResumeBuilderAnalysis("p1");
+
+      const result = await driftService.compare("p1", "version-chat-v8", resumeAnalysis);
+
+      // Score must be substantially lower than Test A (below 25%)
+      expect(result.score).toBeLessThanOrEqual(25);
+      expect(result.counts.byCategory.missing_component).toBeGreaterThan(0);
+
+      // Chat Service must NOT match resume services
+      const missingChat = result.items.find((i) => i.metadata.affectedComponent === "Chat Service");
+      expect(missingChat).toBeDefined();
+      expect(missingChat?.type).toBe("missing");
+
+      // Email integration missing
+      const missingEmail = result.items.find((i) => i.metadata.affectedComponent === "Email Provider");
+      expect(missingEmail).toBeDefined();
+
+      // Database mismatch (MongoDB found vs PostgreSQL expected)
+      const dbMismatch = result.items.find(
+        (i) => i.metadata.findingType === "technology_mismatch" && i.expected.name === "User Database"
+      );
+      expect(dbMismatch).toBeDefined();
+
+      // Unmapped extra modules detected for resume/interview services
+      expect(result.counts.byCategory.extra_module).toBeGreaterThan(0);
+      expect(result.counts.scoreBreakdown?.extraModulesPenalty).toBeGreaterThan(0);
+    });
+
+    it("Test C — Different architecture and repository: Resume Builder architecture against its matching repository yields high conformance", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue(resumeBuilderArchitecture("p1") as any);
+      const resumeAnalysis = createResumeBuilderAnalysis("p1");
+
+      const result = await driftService.compare("p1", "version-resume-v1", resumeAnalysis);
+
+      expect(result.score).toBeGreaterThanOrEqual(75);
+      expect(result.counts.byCategory.missing_component).toBe(0);
+      expect(result.counts.scoreBreakdown?.componentCoverageScore).toBe(100);
+    });
+
+    it("Test D — Missing critical components: Removing auth and persistence significantly reduces score and generates actionable findings", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue(chatAppArchitecture("p1") as any);
+      const baseAnalysis = createChatAppAnalysis("p1");
+
+      // Strip authentication, database, and email
+      const strippedAnalysis: RepositoryAnalysis = {
+        ...baseAnalysis,
+        dependencies: (baseAnalysis.dependencies as any[]).filter((d) => d.name === "react" || d.name === "express"),
+        architecture: {
+          ...baseAnalysis.architecture,
+          databases: [],
+          authentication: false,
+          externalIntegrations: [],
+          apis: ["src/routes/chat.ts"],
+          services: ["src/services/chat-service.ts"],
+          routes: [{ method: "GET", path: "/api/chat/messages", framework: "Express", detectionBasis: "direct_app_route", confidence: "high", file: "src/routes/chat.ts" }],
+        },
+      };
+
+      const result = await driftService.compare("p1", "version-chat-v8", strippedAnalysis);
+
+      expect(result.score).toBeLessThan(60);
+      expect(result.counts.byCategory.missing_component).toBeGreaterThanOrEqual(2);
+
+      const missingAuth = result.items.find((i) => i.metadata.affectedComponent === "Authentication Service");
+      const missingDb = result.items.find((i) => i.metadata.affectedComponent === "User Database");
+      expect(missingAuth).toBeDefined();
+      expect(missingDb).toBeDefined();
+      expect(missingAuth?.recommendation).toBeTruthy();
+      expect(missingDb?.recommendation).toBeTruthy();
+    });
+
+    it("Test E — Extra modules: Adding unrelated modules to an unchanged repository strictly decreases score via penalty and never increases it", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue(chatAppArchitecture("p1") as any);
+      const cleanAnalysis = createChatAppAnalysis("p1");
+      const cleanResult = await driftService.compare("p1", "version-chat-v8", cleanAnalysis);
+
+      // Add 8 unmapped services
+      const analysisWithExtra: RepositoryAnalysis = {
+        ...cleanAnalysis,
+        architecture: {
+          ...cleanAnalysis.architecture,
+          services: [
+            ...(cleanAnalysis.architecture?.services || []),
+            "src/services/invoice-billing.ts",
+            "src/services/payment-gateway.ts",
+            "src/services/pdf-export.ts",
+            "src/services/analytics-tracker.ts",
+            "src/services/telemetry-logger.ts",
+            "src/services/notification-worker.ts",
+            "src/services/fraud-detector.ts",
+            "src/services/image-resizer.ts",
+          ],
+        },
+      };
+
+      const resultWithExtra = await driftService.compare("p1", "version-chat-v8", analysisWithExtra);
+
+      expect(resultWithExtra.counts.byCategory.extra_module).toBe(8);
+      expect(resultWithExtra.counts.scoreBreakdown?.extraModulesPenalty).toBe(24); // 8 * 3
+      expect(resultWithExtra.score).toBeLessThan(cleanResult.score);
+    });
+
+    it("Test F — Technology mismatch: Incompatible database implementation triggers technology mismatch finding and score deduction", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue(chatAppArchitecture("p1") as any);
+      const chatAnalysis = createChatAppAnalysis("p1");
+
+      // Replace PostgreSQL with MongoDB
+      const techMismatchAnalysis: RepositoryAnalysis = {
+        ...chatAnalysis,
+        dependencies: [
+          ...(chatAnalysis.dependencies as any[]).filter((d) => d.name !== "pg"),
+          { name: "mongoose", version: "^7.0.0", ecosystem: "npm", type: "production" },
+        ],
+        architecture: {
+          ...chatAnalysis.architecture,
+          databases: ["MongoDB"],
+        },
+      };
+
+      const result = await driftService.compare("p1", "version-chat-v8", techMismatchAnalysis);
+
+      const dbMismatch = result.items.find(
+        (i) => i.metadata.findingType === "technology_mismatch" && i.expected.name === "User Database"
+      );
+      expect(dbMismatch).toBeDefined();
+      expect(dbMismatch?.severity).toBe("high");
+      expect(result.counts.scoreBreakdown?.technologyCompatibilityScore).toBeLessThan(100);
+    });
+
+    it("Test G — Connection mismatch: Severing planned service connections reduces connection coverage score", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue(chatAppArchitecture("p1") as any);
+      const chatAnalysis = createChatAppAnalysis("p1");
+
+      // Sever chat service and external email integration
+      const decoupledAnalysis: RepositoryAnalysis = {
+        ...chatAnalysis,
+        architecture: {
+          ...chatAnalysis.architecture,
+          apis: ["src/routes/auth.ts"],
+          services: ["src/services/auth-service.ts"],
+          routes: [{ method: "POST", path: "/api/auth/login", framework: "Express", detectionBasis: "direct_app_route", confidence: "high", file: "src/routes/auth.ts" }],
+          externalIntegrations: [],
+        },
+        dependencies: (chatAnalysis.dependencies as any[]).filter((d) => d.name !== "sendgrid"),
+      };
+
+      const result = await driftService.compare("p1", "version-chat-v8", decoupledAnalysis);
+
+      expect(result.counts.scoreBreakdown?.connectionCoverageScore).toBeLessThan(50);
+      expect(result.items.some((i) => i.metadata.category.includes("Connection") || i.metadata.findingType === "integration_mismatch")).toBe(true);
+    });
+
+    it("Test H — Uncertain evidence: Low file count and dynamic nodes produce low/medium confidence rather than confident false matches", async () => {
+      const dynamicArch = {
+        version: {
+          id: "v-dyn",
+          project_id: "p1",
+          version_number: 1,
+          name: "Dynamic App",
+        },
+        nodes: [
+          { id: "dyn-node", name: "Dynamic Webhook", type: "external_service", metadata: { dynamic: true } },
+        ],
+        edges: [],
+      };
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue(dynamicArch as any);
+
+      const minimalAnalysis: RepositoryAnalysis = {
+        id: "a-min",
+        repository_id: "r1",
+        project_id: "p1",
+        commit_sha: "sha-min",
+        status: "completed",
+        frameworks: [],
+        languages: {},
+        dependencies: [],
+        infrastructure: {},
+        architecture: {
+          services: [],
+          externalIntegrations: [],
+        },
+        metrics: { fileCount: 1 },
+        analysis_data: {
+          filesAnalyzed: 1,
+          fileCounts: { totalFilesDiscovered: 1, eligibleSourceFiles: 1, analyzedSourceFiles: 1, skippedFiles: 0, failedFiles: 0, manifestFilesProcessed: 0 },
+        },
+        started_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      };
+
+      const result = await driftService.compare("p1", "v-dyn", minimalAnalysis);
+
+      expect(result.counts.scoreBreakdown?.analysisConfidence).toBe("low");
+      expect(result.counts.byCategory.uncertain_match).toBeGreaterThan(0);
+      expect(result.counts.byCategory.coverage_limitation).toBeGreaterThan(0);
+    });
+
+    it("Test I — Multiple repositories: Switching between repositories keeps each analysis strictly isolated to its own snapshot", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue(chatAppArchitecture("p1") as any);
+
+      const chatAnalysis = createChatAppAnalysis("p1");
+      const resumeAnalysis = createResumeBuilderAnalysis("p1");
+
+      const chatResult = await driftService.compare("p1", "version-chat-v8", chatAnalysis);
+      const resumeResult = await driftService.compare("p1", "version-chat-v8", resumeAnalysis);
+
+      expect(chatResult.score).toBeGreaterThan(80);
+      expect(resumeResult.score).toBeLessThanOrEqual(25);
+      // Results are independent and unpolluted
+      expect(chatResult.counts.byCategory.missing_component).toBe(0);
+      expect(resumeResult.counts.byCategory.missing_component).toBeGreaterThan(0);
+    });
+
+    it("Test J — Snapshot isolation: Two commit snapshots of the same repository evaluate independently without reusing stale findings", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue(chatAppArchitecture("p1") as any);
+
+      // Snapshot 1 (older commit without chat routes)
+      const olderAnalysis: RepositoryAnalysis = {
+        ...createChatAppAnalysis("p1", "sha-commit-old"),
+        architecture: {
+          ...createChatAppAnalysis("p1").architecture,
+          apis: ["src/routes/auth.ts"],
+          services: ["src/services/auth-service.ts"],
+          routes: [{ method: "POST", path: "/api/auth/login", framework: "Express", detectionBasis: "direct_app_route", confidence: "high", file: "src/routes/auth.ts" }],
+        },
+      };
+
+      // Snapshot 2 (newer commit with chat routes restored)
+      const newerAnalysis = createChatAppAnalysis("p1", "sha-commit-new");
+
+      const olderResult = await driftService.compare("p1", "version-chat-v8", olderAnalysis);
+      const newerResult = await driftService.compare("p1", "version-chat-v8", newerAnalysis);
+
+      expect(olderResult.items.some((i) => i.metadata.affectedComponent === "Chat Service")).toBe(true);
+      expect(newerResult.items.some((i) => i.metadata.affectedComponent === "Chat Service")).toBe(false);
+      expect(newerResult.score).toBeGreaterThan(olderResult.score);
+    });
+
+    it("Test K — Security and ownership: Rejects unauthorized access across project boundaries", async () => {
+      const foreignAnalysis = createChatAppAnalysis("other-project-456");
+
+      // Snapshot project_id mismatch
+      await expect(
+        driftService.compare("my-project-123", "version-chat-v8", foreignAnalysis)
+      ).rejects.toThrow("Repository analysis snapshot not found for this project");
+
+      // Architecture version project_id mismatch
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue({
+        version: { id: "v1", project_id: "other-project-456", version_number: 1 },
+        nodes: [],
+        edges: [],
+      } as any);
+
+      const localAnalysis = createChatAppAnalysis("my-project-123");
+      await expect(
+        driftService.compare("my-project-123", "v1", localAnalysis)
+      ).rejects.toThrow("Architecture version not found for this project");
+    });
+
+    it("Test L — Empty and failed scans: Failed scans are rejected and empty repositories do not produce a misleading 100% score", async () => {
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue(chatAppArchitecture("p1") as any);
+
+      const failedAnalysis: RepositoryAnalysis = {
+        ...createChatAppAnalysis("p1"),
+        status: "failed",
+      };
+
+      await expect(
+        driftService.compare("p1", "version-chat-v8", failedAnalysis)
+      ).rejects.toThrow("Request validation failed");
+
+      // Empty repository
+      const emptyAnalysis: RepositoryAnalysis = {
+        id: "a-empty",
+        repository_id: "r-empty",
+        project_id: "p1",
+        commit_sha: "sha-empty",
+        status: "completed",
+        frameworks: [],
+        languages: {},
+        dependencies: [],
+        infrastructure: {},
+        architecture: { services: [], databases: [], routes: [], entryPoints: [] },
+        metrics: { fileCount: 0 },
+        analysis_data: { filesAnalyzed: 0 },
+        started_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      };
+
+      const emptyResult = await driftService.compare("p1", "version-chat-v8", emptyAnalysis);
+      expect(emptyResult.score).toBeLessThanOrEqual(20);
+      expect(emptyResult.score).not.toBe(100);
+      expect(emptyResult.counts.scoreBreakdown?.analysisConfidence).toBe("low");
+    });
+  });
 });
