@@ -1,6 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { History, GitCompare, Copy, RotateCcw, Trash2, Pencil, Eye, Sparkles } from "lucide-react";
+import { History, GitCompare, Copy, RotateCcw, Trash2, Eye, Loader2, Plus, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useState, useEffect, useCallback } from "react";
+import { useWorkspace } from "@/lib/workspace-context";
+import {
+  getArchitectureVersions,
+  deleteArchitectureVersion,
+  duplicateArchitectureVersion,
+  restoreArchitectureVersion,
+  type ArchitectureVersion,
+} from "@/api/architecture";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/versions")({
   head: () => ({
@@ -14,30 +24,91 @@ export const Route = createFileRoute("/_app/versions")({
   component: VersionsPage,
 });
 
-type Version = {
-  n: number;
-  ts: string;
-  author: string;
-  model: string;
-  score: number;
-  health: number;
-  docs: number;
-  note: string;
-  tag?: "current" | "milestone";
-};
-
-const VERSIONS: Version[] = [
-  { n: 12, ts: "2026-07-03 14:22", author: "Alex Rios", model: "gen-4", score: 92, health: 88, docs: 76, note: "Split UserService into Auth + Profile", tag: "current" },
-  { n: 11, ts: "2026-07-02 09:18", author: "Alex Rios", model: "gen-4", score: 88, health: 85, docs: 71, note: "Introduced Redis cache in front of Orders" },
-  { n: 10, ts: "2026-06-30 16:04", author: "Priya Shah", model: "gen-4", score: 86, health: 84, docs: 68, note: "Beta milestone — event bus adoption", tag: "milestone" },
-  { n: 9, ts: "2026-06-27 11:41", author: "Priya Shah", model: "gen-3.5", score: 83, health: 80, docs: 64, note: "Refactored Notifications fanout" },
-  { n: 8, ts: "2026-06-22 18:07", author: "Alex Rios", model: "gen-3.5", score: 81, health: 78, docs: 61, note: "Split payments into billing + settlement" },
-  { n: 7, ts: "2026-06-19 08:33", author: "Marco Diaz", model: "gen-3.5", score: 79, health: 74, docs: 58, note: "Initial multi-region topology" },
-  { n: 6, ts: "2026-06-16 20:12", author: "Marco Diaz", model: "gen-3.5", score: 76, health: 72, docs: 55, note: "Added Kafka event bus" },
-  { n: 5, ts: "2026-06-13 12:44", author: "Alex Rios", model: "gen-3", score: 74, health: 70, docs: 52, note: "Sprint 2 baseline", tag: "milestone" },
-];
-
 function VersionsPage() {
+  const { currentProject } = useWorkspace();
+  const [versions, setVersions] = useState<ArchitectureVersion[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [actionId, setActionId] = useState<string | null>(null);
+
+  const fetchVersions = useCallback(async () => {
+    if (!currentProject) return;
+    setLoading(true);
+    try {
+      const data = await getArchitectureVersions(currentProject.id);
+      setVersions(data);
+    } catch {
+      // handled by global interceptor
+    } finally {
+      setLoading(false);
+    }
+  }, [currentProject]);
+
+  useEffect(() => {
+    fetchVersions();
+  }, [fetchVersions]);
+
+  const handleDuplicate = async (v: ArchitectureVersion) => {
+    if (!currentProject) return;
+    setActionId(v.id);
+    try {
+      const graph = await duplicateArchitectureVersion(currentProject.id, v.id, {
+        name: `${v.name} (copy)`,
+      });
+      toast.success(`Duplicated as v${graph.version?.version_number}`);
+      await fetchVersions();
+    } catch {
+      // handled
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleRestore = async (v: ArchitectureVersion) => {
+    if (!currentProject) return;
+    setActionId(v.id + "_restore");
+    try {
+      const graph = await restoreArchitectureVersion(currentProject.id, v.id);
+      toast.success(`Restored as v${graph.version?.version_number} — original v${v.version_number} unchanged`);
+      await fetchVersions();
+    } catch {
+      // handled
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleDelete = async (v: ArchitectureVersion) => {
+    if (!currentProject) return;
+    if (!window.confirm(`Delete version "${v.name}" (v${v.version_number})? This cannot be undone.`)) return;
+    setActionId(v.id + "_delete");
+    try {
+      await deleteArchitectureVersion(currentProject.id, v.id);
+      setVersions((prev) => prev.filter((ver) => ver.id !== v.id));
+      toast.success(`Version ${v.version_number} deleted`);
+    } catch {
+      // handled
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const totalVersions = versions.length;
+  const publishedCount = versions.filter((v) => v.status === "published").length;
+  const latestVersion = versions[0];
+
+  if (!currentProject) {
+    return (
+      <div className="p-6 lg:p-8 grid place-items-center min-h-[50vh]">
+        <div className="text-center space-y-3 max-w-sm">
+          <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto" />
+          <h2 className="text-base font-display font-semibold">No project selected</h2>
+          <p className="text-sm text-muted-foreground">Select a project from the dashboard to view its architecture versions.</p>
+          <Button asChild variant="outline" size="sm"><Link to="/">Go to Dashboard</Link></Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 lg:p-8 space-y-6">
       <header className="flex items-end justify-between gap-4 flex-wrap">
@@ -47,30 +118,59 @@ function VersionsPage() {
           </div>
           <h1 className="text-2xl font-display font-semibold tracking-tight">Version history</h1>
           <p className="text-sm text-muted-foreground">
-            Every generation is preserved as an immutable version. Nothing is ever overwritten.
+            Every version is immutable. Restore or duplicate creates a new version — the original is preserved.
+          </p>
+          <p className="text-xs font-mono text-muted-foreground">
+            Project: <span className="text-foreground">{currentProject.name}</span>
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" asChild><Link to="/compare"><GitCompare /> Compare two versions</Link></Button>
-          <Button asChild><Link to="/workspace"><Sparkles /> Generate v13</Link></Button>
+          <Button asChild><Link to="/workspace"><Plus /> New Version</Link></Button>
         </div>
       </header>
 
       <div className="grid grid-cols-4 gap-3">
-        <SummaryStat label="Total versions" value="12" />
-        <SummaryStat label="Milestones" value="2" />
-        <SummaryStat label="Avg score" value="82.5" />
-        <SummaryStat label="Retained storage" value="42 MB" />
+        <SummaryStat label="Total versions" value={loading ? "…" : String(totalVersions)} />
+        <SummaryStat label="Published" value={loading ? "…" : String(publishedCount)} />
+        <SummaryStat label="Latest" value={loading ? "…" : latestVersion ? `v${latestVersion.version_number}` : "—"} />
+        <SummaryStat label="Project" value={currentProject.name.slice(0, 12)} />
       </div>
 
-      <div className="relative">
-        <div className="absolute left-[15px] top-1 bottom-1 w-px bg-border" aria-hidden />
-        <div className="space-y-3">
-          {VERSIONS.map((v) => (
-            <VersionRow key={v.n} v={v} />
-          ))}
+      {loading ? (
+        <div className="surface-panel p-12 flex items-center justify-center gap-2 text-xs font-mono text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          Loading architecture versions…
         </div>
-      </div>
+      ) : versions.length === 0 ? (
+        <div className="surface-panel p-12 text-center space-y-4">
+          <History className="h-10 w-10 text-muted-foreground mx-auto" />
+          <div className="space-y-2">
+            <h3 className="text-base font-display font-semibold">No architecture versions yet</h3>
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+              Open the Workspace, design your architecture on the canvas, then click "Save Version" to create the first immutable snapshot.
+            </p>
+          </div>
+          <Button asChild size="sm"><Link to="/workspace">Open Workspace</Link></Button>
+        </div>
+      ) : (
+        <div className="relative">
+          <div className="absolute left-[15px] top-1 bottom-1 w-px bg-border" aria-hidden />
+          <div className="space-y-3">
+            {versions.map((v, idx) => (
+              <VersionRow
+                key={v.id}
+                v={v}
+                isCurrent={idx === 0}
+                actionId={actionId}
+                onDuplicate={() => handleDuplicate(v)}
+                onRestore={() => handleRestore(v)}
+                onDelete={() => handleDelete(v)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -84,59 +184,106 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function VersionRow({ v }: { v: Version }) {
-  const isCurrent = v.tag === "current";
+function VersionRow({
+  v,
+  isCurrent,
+  actionId,
+  onDuplicate,
+  onRestore,
+  onDelete,
+}: {
+  v: ArchitectureVersion;
+  isCurrent: boolean;
+  actionId: string | null;
+  onDuplicate: () => void;
+  onRestore: () => void;
+  onDelete: () => void;
+}) {
+  const statusColor =
+    v.status === "published"
+      ? "bg-panel border-primary"
+      : v.status === "archived"
+        ? "bg-panel border-border opacity-50"
+        : "bg-panel border-border";
+
   return (
     <div className="relative pl-9">
       <div
         className={
           "absolute left-[8px] top-4 h-4 w-4 rounded-full border-2 " +
-          (isCurrent ? "bg-primary border-primary" : v.tag === "milestone" ? "bg-panel border-warning" : "bg-panel border-border")
+          (isCurrent ? "bg-primary border-primary" : v.status === "published" ? "bg-panel border-success" : "bg-panel border-border")
         }
       />
-      <div className="surface-panel p-4 hover:border-border/80 transition-colors">
+      <div className={`surface-panel p-4 hover:border-border/80 transition-colors ${v.status === "archived" ? "opacity-60" : ""}`}>
         <div className="flex items-start gap-4 flex-wrap">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-xs text-muted-foreground">v{v.n}</span>
-              <span className="font-display font-semibold text-sm">{v.note}</span>
-              {isCurrent && <span className="h-5 px-1.5 rounded text-[10px] font-mono uppercase bg-primary/15 text-primary border border-primary/30">Current</span>}
-              {v.tag === "milestone" && <span className="h-5 px-1.5 rounded text-[10px] font-mono uppercase bg-warning/15 text-warning border border-warning/30">Milestone</span>}
+              <span className="font-mono text-xs text-muted-foreground">v{v.version_number}</span>
+              <span className="font-display font-semibold text-sm">{v.name}</span>
+              {isCurrent && (
+                <span className="h-5 px-1.5 rounded text-[10px] font-mono uppercase bg-primary/15 text-primary border border-primary/30">
+                  Latest
+                </span>
+              )}
+              {v.status === "published" && (
+                <span className="h-5 px-1.5 rounded text-[10px] font-mono uppercase bg-success/15 text-success border border-success/30">
+                  Published
+                </span>
+              )}
+              {v.status === "archived" && (
+                <span className="h-5 px-1.5 rounded text-[10px] font-mono uppercase bg-muted/30 text-muted-foreground border border-border">
+                  Archived
+                </span>
+              )}
             </div>
+            {v.description && (
+              <p className="mt-1 text-xs text-muted-foreground">{v.description}</p>
+            )}
             <div className="mt-1 text-[11px] font-mono text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
-              <span>{v.ts}</span>
-              <span>by {v.author}</span>
-              <span>model {v.model}</span>
+              <span>{new Date(v.created_at).toLocaleString()}</span>
+              <span>status: {v.status}</span>
             </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4 min-w-[280px]">
-            <MiniMetric label="Score" value={v.score} accent="primary" />
-            <MiniMetric label="Health" value={v.health} accent="success" />
-            <MiniMetric label="Docs" value={v.docs} accent="info" />
           </div>
         </div>
         <div className="mt-3 pt-3 border-t border-border flex flex-wrap gap-1">
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"><Eye /> Open</Button>
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"><Pencil /> Rename</Button>
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"><Copy /> Duplicate</Button>
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"><RotateCcw /> Restore</Button>
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" asChild><Link to="/compare"><GitCompare /> Compare</Link></Button>
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive hover:text-destructive"><Trash2 /> Delete</Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MiniMetric({ label, value, accent }: { label: string; value: number; accent: "primary" | "success" | "info" }) {
-  const cls = accent === "primary" ? "bg-primary" : accent === "success" ? "bg-success" : "bg-info";
-  return (
-    <div>
-      <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="flex items-center gap-2 mt-1">
-        <span className="text-lg font-display font-semibold tabular-nums">{value}</span>
-        <div className="flex-1 h-1 rounded-full bg-surface overflow-hidden">
-          <div className={"h-full " + cls} style={{ width: `${value}%` }} />
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" asChild>
+            <Link to="/workspace"><Eye /> Open</Link>
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            onClick={onDuplicate}
+            disabled={actionId === v.id}
+          >
+            {actionId === v.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Copy />}
+            Duplicate
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            onClick={onRestore}
+            disabled={actionId === v.id + "_restore"}
+          >
+            {actionId === v.id + "_restore" ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw />}
+            Restore
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" asChild>
+            <Link to="/compare"><GitCompare /> Compare</Link>
+          </Button>
+          {v.status !== "published" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+              onClick={onDelete}
+              disabled={actionId === v.id + "_delete"}
+            >
+              {actionId === v.id + "_delete" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 />}
+              Delete
+            </Button>
+          )}
         </div>
       </div>
     </div>

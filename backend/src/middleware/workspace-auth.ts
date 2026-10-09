@@ -21,7 +21,14 @@ export const requireWorkspaceOwner = requireWorkspaceRole(["owner"]);
 
 export async function requireWorkspaceFromInput(request: Request, _response: Response, next: NextFunction): Promise<void> {
   try {
-    const workspaceId = String(request.body.workspace_id ?? request.query.workspace_id ?? "");
+    const rawWorkspaceId = request.body?.workspace_id ?? request.query?.workspace_id;
+    if (!rawWorkspaceId) {
+      if (request.method === "GET") {
+        return next();
+      }
+      throw new NotFoundError("Workspace ID is required");
+    }
+    const workspaceId = String(rawWorkspaceId);
     const member = await workspaceRepository.findMember(workspaceId, (request as unknown as AuthenticatedRequest).userId);
     if (!member) throw new NotFoundError("Workspace not found");
     request.workspaceMember = member;

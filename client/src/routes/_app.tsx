@@ -11,6 +11,9 @@ import {
   Search,
   Bell,
   ChevronRight,
+  ChevronDown,
+  Building2,
+  Plus,
   CheckCircle2,
   ShieldAlert,
   Sparkles,
@@ -35,6 +38,7 @@ import { CommandPalette } from "@/components/command-palette";
 import { GeometricAvatar } from "@/components/geometric-avatar";
 import { getHealth } from "@/api/health";
 import { useAuth } from "@/lib/auth-context";
+import { useWorkspace } from "@/lib/workspace-context";
 
 export const Route = createFileRoute("/_app")({
   component: AppShell,
@@ -87,6 +91,7 @@ const INTEL_NAV: NavItem[] = [
 
 function AppShell() {
   const { user, loading, isAuthenticated, logout } = useAuth();
+  const { currentWorkspace } = useWorkspace();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const crumbs = pathname === "/" ? ["dashboard"] : pathname.split("/").filter(Boolean);
@@ -138,6 +143,9 @@ function AppShell() {
       <aside className="w-56 shrink-0 border-r border-border bg-panel flex flex-col h-full">
         <div className="h-12 px-3 flex items-center border-b border-border shrink-0">
           <Logo />
+        </div>
+        <div className="p-2 border-b border-border shrink-0">
+          <WorkspaceSwitcher />
         </div>
         <nav className="flex-1 min-h-0 overflow-y-auto p-2 space-y-0.5">
           <div className="px-2 pt-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
@@ -203,6 +211,12 @@ function AppShell() {
         <header className="h-12 border-b border-border bg-panel/95 backdrop-blur-sm flex items-center gap-3 px-4 shrink-0">
           <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground">
             <span>archforge</span>
+            {currentWorkspace && (
+              <>
+                <ChevronRight className="h-3 w-3" />
+                <span className="text-foreground">{currentWorkspace.name}</span>
+              </>
+            )}
             {crumbs.map((c, i) => (
               <span key={i} className="flex items-center gap-1.5">
                 <ChevronRight className="h-3 w-3" />
@@ -469,6 +483,95 @@ function StatusBar() {
       <span>LF</span>
       <span>TypeScript</span>
       <span className="text-primary">⌘K</span>
+    </div>
+  );
+}
+
+function WorkspaceSwitcher() {
+  const {
+    workspaces,
+    currentWorkspace,
+    selectWorkspace,
+    setIsNewWorkspaceOpen,
+    setIsNewProjectOpen,
+  } = useWorkspace();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded border border-border bg-surface/60 hover:bg-surface text-left transition-colors"
+        title="Active Workspace"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
+          <span className="text-xs font-medium truncate">
+            {currentWorkspace ? currentWorkspace.name : "Select Workspace"}
+          </span>
+        </div>
+        <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 right-0 top-full mt-1 surface-panel shadow-xl z-50 overflow-hidden divide-y divide-border">
+            <div className="p-1 max-h-48 overflow-y-auto">
+              <div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                Workspaces ({workspaces.length})
+              </div>
+              {workspaces.length === 0 ? (
+                <div className="px-2 py-2 text-xs text-muted-foreground font-mono">
+                  No workspaces yet
+                </div>
+              ) : (
+                workspaces.map((w) => {
+                  const active = currentWorkspace?.id === w.id;
+                  return (
+                    <button
+                      key={w.id}
+                      onClick={() => {
+                        selectWorkspace(w);
+                        setOpen(false);
+                      }}
+                      className={
+                        "w-full flex items-center justify-between px-2 py-1.5 rounded text-xs text-left transition-colors " +
+                        (active ? "bg-surface font-medium text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-surface/50")
+                      }
+                    >
+                      <span className="truncate">{w.name}</span>
+                      {active && <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <div className="p-1 space-y-0.5">
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  setIsNewWorkspaceOpen(true);
+                }}
+                className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-primary hover:bg-surface/60 transition-colors"
+              >
+                <Plus className="h-3 w-3" />
+                <span>New Workspace</span>
+              </button>
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  setIsNewProjectOpen(true);
+                }}
+                className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-surface/60 transition-colors"
+              >
+                <Plus className="h-3 w-3" />
+                <span>New Project</span>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

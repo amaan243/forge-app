@@ -4,13 +4,222 @@ import type { RepositoryProvider } from "../integrations/repository-provider.js"
 import { repositoryIntelligenceRepository } from "../repositories/repository-intelligence-repository.js";
 import { dependencyAnalyzerService } from "./dependency-analyzer-service.js";
 import { RepositoryAnalyzerService } from "./repository-analyzer-service.js";
+import type { RepositoryRecord, RepositoryAnalysis } from "../types/repository-intelligence.js";
+import { logger } from "../lib/logger.js";
+
 export class RepositoryIntelligenceService {
-  constructor(private readonly providers: Record<string, RepositoryProvider> = { github: new GitHubRepositoryProvider() }, private readonly analyzer = new RepositoryAnalyzerService()) {}
-  async connect(projectId: string, userId: string, input: { url: string; branch?: string; provider: string; accessType?: "public" | "private"; tokenReference?: string }) { const provider = this.providers[input.provider]; if (!provider) throw new NotFoundError("Repository provider is not supported"); const external = await provider.connect(input); const { id: _id, project_id: _projectId, connected_by: _connectedBy, created_at: _createdAt, updated_at: _updatedAt, ...repository } = external; void _id; void _projectId; void _connectedBy; void _createdAt; void _updatedAt; return repositoryIntelligenceRepository.connect({ ...repository, project_id: projectId, connected_by: userId, default_branch: input.branch ?? external.default_branch, access_type: input.accessType ?? external.access_type }); }
-  get(projectId: string) { return repositoryIntelligenceRepository.repository(projectId); }
-  disconnect(projectId: string) { return repositoryIntelligenceRepository.disconnect(projectId); }
-  async analyze(projectId: string, userId: string, existingAnalysisId?: string) { void userId; const repository = await repositoryIntelligenceRepository.repository(projectId); if (!repository) throw new NotFoundError("Repository is not connected"); const provider = this.providers[repository.provider]; if (!provider) throw new NotFoundError("Repository provider is not supported"); const analysis = existingAnalysisId ? await repositoryIntelligenceRepository.analysis(existingAnalysisId) : await repositoryIntelligenceRepository.createAnalysis({ repository_id: repository.id, project_id: projectId, status: "queued", frameworks: {}, languages: {}, dependencies: {}, infrastructure: {}, architecture: {}, metrics: {}, analysis_data: {} }); if (!analysis) throw new NotFoundError("Repository analysis not found"); try { await repositoryIntelligenceRepository.updateAnalysis(analysis.id, { status: "running", started_at: new Date().toISOString() }); const result = this.analyzer.analyze(await provider.fetchSnapshot(repository)); const dependencies = result.dependencies.map((dependency) => ({ ...dependency, risk_level: dependencyAnalyzerService.riskFor(dependency.name, dependency.version), metadata: dependency.metadata ?? {} })); const completed = await repositoryIntelligenceRepository.updateAnalysis(analysis.id, { status: "completed", commit_sha: String(result.analysisData.commitSha), frameworks: result.frameworks, languages: result.languages, dependencies: result.dependencies, infrastructure: result.infrastructure, architecture: result.architecture, metrics: result.metrics, analysis_data: result.analysisData, completed_at: new Date().toISOString() }); await repositoryIntelligenceRepository.replaceDependencies(projectId, analysis.id, dependencies); return completed; } catch (error) { await repositoryIntelligenceRepository.updateAnalysis(analysis.id, { status: "failed", analysis_data: { error: error instanceof Error ? error.message : "Analysis failed" }, completed_at: new Date().toISOString() }); throw error; } }
-  async enqueueAnalysis(projectId: string, userId: string) { const repository = await repositoryIntelligenceRepository.repository(projectId); if (!repository) throw new NotFoundError("Repository is not connected"); void userId; return repositoryIntelligenceRepository.createAnalysis({ repository_id: repository.id, project_id: projectId, status: "queued", frameworks: {}, languages: {}, dependencies: {}, infrastructure: {}, architecture: {}, metrics: {}, analysis_data: {} }); }
-  dependencies(projectId: string, filters: { type?: string; risk?: string; ecosystem?: string }) { return repositoryIntelligenceRepository.dependencies(projectId, filters); }
+  constructor(
+    private readonly providers: Record<string, RepositoryProvider> = { github: new GitHubRepositoryProvider() },
+    private readonly analyzer = new RepositoryAnalyzerService()
+  ) {}
+
+  async connect(
+    projectId: string,
+    userId: string,
+    input: { url: string; branch?: string; provider?: string; accessType?: "public" | "private"; tokenReference?: string }
+  ): Promise<RepositoryRecord> {
+    const providerName = input.provider || "github";
+    const provider = this.providers[providerName];
+    if (!provider) throw new NotFoundError(`Repository provider '${providerName}' is not supported`);
+
+    // Verify repository exists on GitHub
+    const external = await provider.connect({
+      url: input.url,
+      branch: input.branch,
+      accessType: input.accessType,
+      tokenReference: input.tokenReference,
+    });
+
+    // Check if repository record already exists for project
+    const existing = await repositoryIntelligenceRepository.repository(projectId);
+    if (existing) {
+      await repositoryIntelligenceRepository.disconnect(projectId);
+    }
+
+    const { id: _id, project_id: _projectId, connected_by: _connectedBy, created_at: _createdAt, updated_at: _updatedAt, ...repository } = external;
+    void _id;
+    void _projectId;
+    void _connectedBy;
+    void _createdAt;
+    void _updatedAt;
+
+    return repositoryIntelligenceRepository.connect({
+      ...repository,
+      project_id: projectId,
+      connected_by: userId,
+      default_branch: input.branch || external.default_branch || "main",
+      access_type: input.accessType || external.access_type || "public",
+    });
+  }
+
+  async get(projectId: string): Promise<{
+    repository: RepositoryRecord | null;
+    latestAnalysis: RepositoryAnalysis | null;
+    latestAttempt: RepositoryAnalysis | null;
+    latestSuccessful: RepositoryAnalysis | null;
+    activeAnalysis: RepositoryAnalysis | null;
+  }> {
+    const repository = await repositoryIntelligenceRepository.repository(projectId);
+    if (!repository) {
+      return { repository: null, latestAnalysis: null, latestAttempt: null, latestSuccessful: null, activeAnalysis: null };
+    }
+    const latestAttempt = await repositoryIntelligenceRepository.latestAttempt(projectId);
+    const latestSuccessful = await repositoryIntelligenceRepository.latestSuccessful(projectId);
+    const latestAnalysis = latestSuccessful || latestAttempt;
+    const activeAnalysis = await repositoryIntelligenceRepository.activeAnalysis(projectId);
+    return { repository, latestAnalysis, latestAttempt, latestSuccessful, activeAnalysis };
+  }
+
+  async disconnect(projectId: string): Promise<void> {
+    return repositoryIntelligenceRepository.disconnect(projectId);
+  }
+
+  async analyses(projectId: string): Promise<RepositoryAnalysis[]> {
+    return repositoryIntelligenceRepository.analyses(projectId);
+  }
+
+  async latestAnalysis(projectId: string): Promise<RepositoryAnalysis | null> {
+    return repositoryIntelligenceRepository.latestAnalysis(projectId);
+  }
+
+  async analysis(analysisId: string): Promise<RepositoryAnalysis | null> {
+    return repositoryIntelligenceRepository.analysis(analysisId);
+  }
+
+  async enqueueAnalysis(projectId: string, userId: string, branch?: string): Promise<RepositoryAnalysis> {
+    const repository = await repositoryIntelligenceRepository.repository(projectId);
+    if (!repository) throw new NotFoundError("No repository connected for this project");
+
+    void userId;
+
+    // Check if an analysis is already queued or running to prevent duplicate concurrent work
+    const active = await repositoryIntelligenceRepository.activeAnalysis(projectId);
+    if (active) {
+      return active;
+    }
+
+    if (branch && branch !== repository.default_branch) {
+      // Update branch if specified
+      await repositoryIntelligenceRepository.connect({
+        ...repository,
+        default_branch: branch,
+      }).catch(() => undefined);
+    }
+
+    return repositoryIntelligenceRepository.createAnalysis({
+      repository_id: repository.id,
+      project_id: projectId,
+      status: "queued",
+      frameworks: [],
+      languages: {},
+      dependencies: [],
+      infrastructure: {},
+      architecture: {},
+      metrics: {},
+      analysis_data: { branch: branch || repository.default_branch },
+    });
+  }
+
+  async analyze(projectId: string, userId: string, existingAnalysisId?: string): Promise<RepositoryAnalysis> {
+    void userId;
+    const repository = await repositoryIntelligenceRepository.repository(projectId);
+    if (!repository) throw new NotFoundError("Repository is not connected");
+
+    const provider = this.providers[repository.provider];
+    if (!provider) throw new NotFoundError(`Repository provider '${repository.provider}' is not supported`);
+
+    const analysis = existingAnalysisId
+      ? await repositoryIntelligenceRepository.analysis(existingAnalysisId)
+      : await repositoryIntelligenceRepository.createAnalysis({
+          repository_id: repository.id,
+          project_id: projectId,
+          status: "queued",
+          frameworks: [],
+          languages: {},
+          dependencies: [],
+          infrastructure: {},
+          architecture: {},
+          metrics: {},
+          analysis_data: {},
+        });
+
+    if (!analysis) throw new NotFoundError("Repository analysis record not found");
+
+    try {
+      await repositoryIntelligenceRepository.updateAnalysis(analysis.id, {
+        status: "running",
+        started_at: new Date().toISOString(),
+      });
+
+      const snapshot = await provider.fetchSnapshot(repository);
+      const result = this.analyzer.analyze(snapshot);
+
+      const rawDependencies = result.dependencies.map((dependency) => ({
+        ...dependency,
+        risk_level: dependencyAnalyzerService.riskFor(dependency.name, dependency.version),
+        metadata: dependency.metadata ?? {},
+      }));
+
+      // Deduplicate dependencies by (ecosystem, lowercase name) to respect table unique(project_id, name, ecosystem)
+      const deduplicated = new Map<string, typeof rawDependencies[0]>();
+      for (const dep of rawDependencies) {
+        const key = `${dep.ecosystem}:${dep.name.toLowerCase()}`;
+        if (!deduplicated.has(key)) {
+          deduplicated.set(key, dep);
+        } else {
+          const existing = deduplicated.get(key)!;
+          if (existing.type !== "runtime" && dep.type === "runtime") {
+            deduplicated.set(key, dep);
+          }
+        }
+      }
+
+      const validTypes = new Set(["runtime", "development", "peer", "infrastructure"]);
+      const validRisks = new Set(["low", "medium", "high", "critical"]);
+
+      const normalizedDependencies = Array.from(deduplicated.values()).map((dep) => ({
+        ...dep,
+        type: validTypes.has(dep.type) ? dep.type : "runtime",
+        risk_level: validRisks.has(dep.risk_level) ? dep.risk_level : "low",
+      }));
+
+      const completed = await repositoryIntelligenceRepository.updateAnalysis(analysis.id, {
+        status: "completed",
+        commit_sha: String(result.analysisData.commitSha || snapshot.commitSha || ""),
+        frameworks: result.frameworks,
+        languages: result.languages,
+        dependencies: normalizedDependencies,
+        infrastructure: result.infrastructure,
+        architecture: result.architecture,
+        metrics: result.metrics,
+        analysis_data: result.analysisData,
+        completed_at: new Date().toISOString(),
+      });
+
+      await repositoryIntelligenceRepository.replaceDependencies(projectId, analysis.id, normalizedDependencies);
+      return completed;
+    } catch (error) {
+      let errorMessage = "Repository analysis failed";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === "object" && error !== null && "message" in error) {
+        errorMessage = String((error as { message: unknown }).message);
+      }
+      logger.error("Repository analysis failed:", error);
+      await repositoryIntelligenceRepository.updateAnalysis(analysis.id, {
+        status: "failed",
+        analysis_data: {
+          error: errorMessage,
+        },
+        completed_at: new Date().toISOString(),
+      });
+      throw error;
+    }
+  }
+
+  async dependencies(projectId: string, filters: { type?: string; risk?: string; ecosystem?: string }) {
+    return repositoryIntelligenceRepository.dependencies(projectId, filters);
+  }
 }
+
 export const repositoryIntelligenceService = new RepositoryIntelligenceService();

@@ -8,7 +8,25 @@ export const repositoryIntelligenceRepository = {
   async createAnalysis(input: Record<string, unknown>): Promise<RepositoryAnalysis> { return insert<RepositoryAnalysis>("repository_analyses", input); },
   async updateAnalysis(id: string, input: Record<string, unknown>): Promise<RepositoryAnalysis> { const { data, error } = await supabaseAdmin.from("repository_analyses").update(input).eq("id", id).select().single(); if (error) throw error; return data as RepositoryAnalysis; },
   async analysis(id: string): Promise<RepositoryAnalysis | null> { const { data, error } = await supabaseAdmin.from("repository_analyses").select().eq("id", id).maybeSingle(); if (error) throw error; return data as RepositoryAnalysis | null; },
-  async latestAnalysis(projectId: string): Promise<RepositoryAnalysis | null> { const { data, error } = await supabaseAdmin.from("repository_analyses").select().eq("project_id", projectId).order("created_at", { ascending: false }).limit(1).maybeSingle(); if (error) throw error; return data as RepositoryAnalysis | null; },
+  async latestAnalysis(projectId: string): Promise<RepositoryAnalysis | null> {
+    const { data: completed } = await supabaseAdmin.from("repository_analyses").select().eq("project_id", projectId).eq("status", "completed").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (completed) return completed as RepositoryAnalysis;
+    const { data, error } = await supabaseAdmin.from("repository_analyses").select().eq("project_id", projectId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (error) throw error;
+    return data as RepositoryAnalysis | null;
+  },
+  async latestAttempt(projectId: string): Promise<RepositoryAnalysis | null> {
+    const { data, error } = await supabaseAdmin.from("repository_analyses").select().eq("project_id", projectId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (error) throw error;
+    return data as RepositoryAnalysis | null;
+  },
+  async latestSuccessful(projectId: string): Promise<RepositoryAnalysis | null> {
+    const { data, error } = await supabaseAdmin.from("repository_analyses").select().eq("project_id", projectId).eq("status", "completed").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (error) throw error;
+    return data as RepositoryAnalysis | null;
+  },
+  async analyses(projectId: string): Promise<RepositoryAnalysis[]> { const { data, error } = await supabaseAdmin.from("repository_analyses").select().eq("project_id", projectId).order("created_at", { ascending: false }); if (error) throw error; return data as RepositoryAnalysis[]; },
+  async activeAnalysis(projectId: string): Promise<RepositoryAnalysis | null> { const { data, error } = await supabaseAdmin.from("repository_analyses").select().eq("project_id", projectId).in("status", ["queued", "running"]).order("created_at", { ascending: false }).limit(1).maybeSingle(); if (error) throw error; return data as RepositoryAnalysis | null; },
   async dependencies(projectId: string, filters: { type?: string; risk?: string; ecosystem?: string }): Promise<DependencyRecord[]> { let query = supabaseAdmin.from("dependencies").select().eq("project_id", projectId); if (filters.type) query = query.eq("type", filters.type); if (filters.risk) query = query.eq("risk_level", filters.risk); if (filters.ecosystem) query = query.eq("ecosystem", filters.ecosystem); const { data, error } = await query.order("name"); if (error) throw error; return data as DependencyRecord[]; },
   async replaceDependencies(projectId: string, analysisId: string, values: Array<Record<string, unknown>>): Promise<DependencyRecord[]> { const { error: deleteError } = await supabaseAdmin.from("dependencies").delete().eq("project_id", projectId); if (deleteError) throw deleteError; if (!values.length) return []; const { data, error } = await supabaseAdmin.from("dependencies").insert(values.map((value) => ({ ...value, project_id: projectId, repository_analysis_id: analysisId }))).select(); if (error) throw error; return data as DependencyRecord[]; },
   async createDrift(input: Record<string, unknown>): Promise<DriftAnalysis> { return insert<DriftAnalysis>("drift_analyses", input); },

@@ -13,6 +13,9 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "../components/ui/sonner";
 import { AuthProvider } from "../lib/auth-context";
+import { WorkspaceProvider } from "../lib/workspace-context";
+import { WorkspaceModal } from "../components/workspace-modal";
+import { ProjectModal } from "../components/project-modal";
 
 function NotFoundComponent() {
   return (
@@ -133,9 +136,13 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
-        <Toaster />
+        <WorkspaceProvider>
+          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+          <Outlet />
+          <WorkspaceModal />
+          <ProjectModal />
+          <Toaster />
+        </WorkspaceProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

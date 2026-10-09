@@ -1,4 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -16,6 +17,7 @@ import {
   Shield,
   ShieldAlert,
   Sparkles,
+  Trash2,
   Wrench,
   Zap,
 } from "lucide-react";
@@ -30,6 +32,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { EmptyState } from "@/components/empty-state";
+import { useWorkspace } from "@/lib/workspace-context";
+import type { Project } from "@/api";
 
 export const Route = createFileRoute("/_app/")({
   head: () => ({
@@ -68,28 +73,24 @@ function Dashboard() {
 }
 
 function TopBanner() {
+  const { workspaces, projects, setIsNewWorkspaceOpen, setIsNewProjectOpen } = useWorkspace();
   return (
     <section className="flex flex-wrap items-end justify-between gap-4">
       <div className="space-y-2">
         <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
-          Session · Wed 01 Jul 2026
+          Workstation · Active Session
         </div>
         <h1 className="text-3xl font-display font-semibold tracking-tight">Welcome back</h1>
         <p className="text-sm text-muted-foreground max-w-xl">
-          Continue building your software architecture. 3 workspaces are active and 1 generation is
-          queued.
+          Continue building your software architecture. {workspaces.length} workspace{workspaces.length === 1 ? "" : "s"} active with {projects.length} project{projects.length === 1 ? "" : "s"} in the registry.
         </p>
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="outline" asChild>
-          <Link to="/repository">
-            <GitBranch /> Import Repository
-          </Link>
+        <Button variant="outline" size="sm" onClick={() => setIsNewProjectOpen(true)}>
+          <Plus className="mr-1 h-3.5 w-3.5" /> New Project
         </Button>
-        <Button asChild>
-          <Link to="/workspace">
-            <Plus /> New Workspace
-          </Link>
+        <Button size="sm" onClick={() => setIsNewWorkspaceOpen(true)}>
+          <Plus className="mr-1 h-3.5 w-3.5" /> New Workspace
         </Button>
       </div>
     </section>
@@ -147,102 +148,146 @@ function QuickStats() {
 
 /* ---------- recent projects ---------- */
 
-type ProjectStatus = "healthy" | "review" | "generating" | "failing";
-
-const PROJECTS: {
-  name: string;
-  stack: string;
-  status: ProjectStatus;
-  updated: string;
-  score: number;
-}[] = [
-  { name: "Payment Gateway", stack: "Node + React", status: "healthy", updated: "12m ago", score: 92 },
-  { name: "Social Network", stack: "React + Spring", status: "review", updated: "1h ago", score: 84 },
-  { name: "ERP System", stack: "MERN", status: "generating", updated: "just now", score: 89 },
-  { name: "Logistics Platform", stack: "Next + Go", status: "healthy", updated: "3h ago", score: 91 },
-  { name: "Telemetry Ingestion", stack: "Rust + Kafka", status: "failing", updated: "yesterday", score: 61 },
-];
-
-function statusBadge(status: ProjectStatus) {
-  const map = {
-    healthy: { label: "Healthy", cls: "bg-success/10 text-success border-success/30" },
-    review: { label: "Needs Review", cls: "bg-warning/10 text-warning border-warning/30" },
-    generating: { label: "Generating", cls: "bg-info/10 text-info border-info/30" },
-    failing: { label: "Failing", cls: "bg-destructive/10 text-destructive border-destructive/30" },
-  } as const;
-  const s = map[status];
-  return (
-    <span className={"inline-flex items-center gap-1.5 h-6 px-2 rounded border text-[11px] font-mono " + s.cls}>
-      {status === "generating" ? (
-        <Loader2 className="h-3 w-3 animate-spin" />
-      ) : (
-        <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      )}
-      {s.label}
-    </span>
-  );
-}
-
 function RecentProjects() {
+  const {
+    projects,
+    loadingProjects,
+    currentWorkspace,
+    selectProject,
+    deleteProject,
+    setIsNewProjectOpen,
+  } = useWorkspace();
+  const navigate = useNavigate();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleOpenProject = (project: Project) => {
+    selectProject(project);
+    navigate({ to: "/workspace" });
+  };
+
+  const handleDeleteProject = async (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to delete project "${name}"?`)) {
+      setDeletingId(id);
+      try {
+        await deleteProject(id);
+      } finally {
+        setDeletingId(null);
+      }
+    }
+  };
+
   return (
     <section>
-      <SectionHeader eyebrow="02" title="Recent projects" hint={`${PROJECTS.length} workspaces`} />
-      <div className="surface-panel overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-border hover:bg-transparent">
-              <TableHead className="px-4 text-[11px] font-mono uppercase tracking-wider">Project</TableHead>
-              <TableHead className="text-[11px] font-mono uppercase tracking-wider">Stack</TableHead>
-              <TableHead className="text-[11px] font-mono uppercase tracking-wider">Status</TableHead>
-              <TableHead className="text-[11px] font-mono uppercase tracking-wider">Last Updated</TableHead>
-              <TableHead className="text-[11px] font-mono uppercase tracking-wider">Score</TableHead>
-              <TableHead className="text-right px-4 text-[11px] font-mono uppercase tracking-wider">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {PROJECTS.map((p) => (
-              <TableRow key={p.name} className="border-border">
-                <TableCell className="px-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-7 w-7 rounded border border-border bg-surface grid place-items-center">
-                      <Box className="h-3.5 w-3.5 text-muted-foreground" />
-                    </div>
-                    <div className="font-medium text-sm">{p.name}</div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <span className="font-mono text-xs text-muted-foreground">{p.stack}</span>
-                </TableCell>
-                <TableCell>{statusBadge(p.status)}</TableCell>
-                <TableCell>
-                  <span className="font-mono text-xs text-muted-foreground">{p.updated}</span>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <div className="h-1 w-16 rounded-full bg-surface overflow-hidden">
-                      <div
-                        className="h-full bg-primary"
-                        style={{ width: `${p.score}%` }}
-                      />
-                    </div>
-                    <span className="font-mono text-xs tabular-nums">{p.score}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-right px-4">
-                  <div className="inline-flex gap-1">
-                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs">
-                      Open
-                    </Button>
-                    <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
-                      Report
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+      <div className="flex items-end justify-between border-b border-border pb-3 mb-4">
+        <div className="flex items-baseline gap-3">
+          <span className="font-mono text-xs text-primary">02</span>
+          <h2 className="text-base font-display font-semibold">Projects</h2>
+          <span className="text-[11px] font-mono text-muted-foreground">
+            {currentWorkspace ? `in ${currentWorkspace.name}` : `${projects.length} total`}
+          </span>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          onClick={() => setIsNewProjectOpen(true)}
+        >
+          <Plus className="h-3 w-3 mr-1" /> New Project
+        </Button>
       </div>
+
+      {loadingProjects ? (
+        <div className="surface-panel p-8 flex items-center justify-center gap-2 text-xs font-mono text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          Loading workspace projects...
+        </div>
+      ) : projects.length === 0 ? (
+        <div className="surface-panel overflow-hidden">
+          <EmptyState
+            glyph="cube"
+            eyebrow="WORKSPACE REGISTRY"
+            title={currentWorkspace ? "No projects in this workspace" : "No workspace selected"}
+            body={
+              currentWorkspace
+                ? `The workspace "${currentWorkspace.name}" has no registered systems yet. Create your first project to model architecture.`
+                : "Create or select a workspace to start managing your architecture projects."
+            }
+            actions={
+              <Button size="sm" onClick={() => setIsNewProjectOpen(true)}>
+                <Plus className="h-3.5 w-3.5 mr-1" /> Create First Project
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <div className="surface-panel overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border hover:bg-transparent">
+                <TableHead className="px-4 text-[11px] font-mono uppercase tracking-wider">Project</TableHead>
+                <TableHead className="text-[11px] font-mono uppercase tracking-wider">Visibility</TableHead>
+                <TableHead className="text-[11px] font-mono uppercase tracking-wider">Status</TableHead>
+                <TableHead className="text-[11px] font-mono uppercase tracking-wider">Created</TableHead>
+                <TableHead className="text-right px-4 text-[11px] font-mono uppercase tracking-wider">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {projects.map((p) => (
+                <TableRow key={p.id} className="border-border">
+                  <TableCell className="px-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded border border-border bg-surface grid place-items-center">
+                        <Box className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-sm">{p.name}</div>
+                        {p.description && (
+                          <div className="text-[11px] text-muted-foreground truncate max-w-xs">{p.description}</div>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <span className="font-mono text-xs text-muted-foreground uppercase">{p.visibility}</span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="font-mono text-[10px] bg-success/10 text-success border-success/30">
+                      {p.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {new Date(p.created_at).toLocaleDateString()}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right px-4">
+                    <div className="inline-flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => handleOpenProject(p)}
+                      >
+                        Open
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive hover:border-destructive/40"
+                        disabled={deletingId === p.id}
+                        onClick={() => handleDeleteProject(p.id, p.name)}
+                        title="Delete project"
+                      >
+                        {deletingId === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </section>
   );
 }

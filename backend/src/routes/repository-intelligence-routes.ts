@@ -11,6 +11,9 @@ repositoryIntelligenceRoutes.post("/repository/connect", requireProjectEditor, r
 repositoryIntelligenceRoutes.get("/repository", requireProjectMember, repositoryIntelligenceController.get);
 repositoryIntelligenceRoutes.delete("/repository", requireProjectAdmin, repositoryIntelligenceController.remove);
 repositoryIntelligenceRoutes.post("/repository/analyze", analysisLimit, requireProjectEditor, repositoryIntelligenceController.analyze);
+repositoryIntelligenceRoutes.get("/repository/analyses", requireProjectMember, repositoryIntelligenceController.analyses);
+repositoryIntelligenceRoutes.get("/repository/analysis/latest", requireProjectMember, repositoryIntelligenceController.latestAnalysis);
+repositoryIntelligenceRoutes.get("/repository/analysis/:analysisId", requireProjectMember, repositoryIntelligenceController.getAnalysis);
 repositoryIntelligenceRoutes.get("/dependencies", requireProjectMember, repositoryIntelligenceController.dependencies);
 repositoryIntelligenceRoutes.post("/drift/analyze", requireProjectEditor, repositoryIntelligenceController.driftAnalyze);
 repositoryIntelligenceRoutes.get("/drift", requireProjectMember, repositoryIntelligenceController.drifts);

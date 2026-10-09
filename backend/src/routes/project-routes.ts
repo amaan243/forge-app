@@ -12,5 +12,6 @@ projectRoutes.patch("/:projectId", requireProjectEditor, projectController.updat
 projectRoutes.delete("/:projectId", requireProjectAdmin, projectController.remove);
 projectRoutes.get("/:projectId/requirements", requireProjectMember, projectController.requirements);
 projectRoutes.post("/:projectId/requirements", requireProjectEditor, projectController.createRequirement);
+projectRoutes.get("/:projectId/requirements/:requirementId", requireProjectMember, projectController.getRequirement);
 projectRoutes.patch("/:projectId/requirements/:requirementId", requireProjectEditor, projectController.updateRequirement);
-projectRoutes.delete("/:projectId/requirements/:requirementId", requireProjectEditor, projectController.removeRequirement);
+projectRoutes.delete("/:projectId/requirements/:requirementId", requireProjectEditor, projectController.removeRequirement);

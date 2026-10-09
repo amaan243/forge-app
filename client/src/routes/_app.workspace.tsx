@@ -1,24 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Cloud,
-  Database,
-  Download,
-  FileCode2,
-  FileUp,
-  Lock,
   Maximize2,
   Minus,
-  Play,
   Plus,
   RefreshCw,
   Save,
-  Server,
-  Sparkles,
   Terminal,
   TriangleAlert,
   XCircle,
@@ -29,6 +20,14 @@ import {
   ShieldAlert,
   Layers,
   ArrowRight,
+  Loader2,
+  Trash2,
+  Pencil,
+  FileCode2,
+  Sparkles,
+  Boxes,
+  LayoutGrid,
+  Move,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +35,24 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { useWorkspace } from "@/lib/workspace-context";
+import {
+  getRequirements,
+  createRequirement,
+  updateRequirement,
+  deleteRequirement,
+  type Requirement,
+} from "@/api/requirements";
+import {
+  getArchitecture,
+  generateArchitecture,
+  saveArchitectureVersion,
+  type ArchitectureNode,
+  type ArchitectureVersion,
+  type ArchitectureNodeType,
+  type ArchitecturePreview,
+} from "@/api/architecture";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/workspace")({
   head: () => ({
@@ -57,27 +74,327 @@ export const Route = createFileRoute("/_app/workspace")({
   component: WorkspacePage,
 });
 
+export type CanvasNodeData = {
+  id: string;
+  label: string;
+  kind: string;
+  x: number;
+  y: number;
+  description?: string;
+  technology?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type CanvasEdgeData = {
+  from: string;
+  to: string;
+  relationship?: string;
+  protocol?: string;
+  description?: string;
+};
+
+export type ConsoleLogItem = {
+  tone: "ok" | "warn" | "err";
+  text: string;
+  time: string;
+};
+
+const NODE_WIDTH = 160;
+const NODE_HEIGHT = 58;
+
+function formatTime(date: Date = new Date()): string {
+  return date.toTimeString().split(" ")[0];
+}
+
+function archNodeToCanvas(n: ArchitectureNode): CanvasNodeData {
+  return {
+    id: n.node_key,
+    label: n.name,
+    kind: n.type,
+    x: n.position_x,
+    y: n.position_y,
+    description: n.description ?? undefined,
+    technology: n.technology ?? undefined,
+    metadata: n.metadata,
+  };
+}
+
 function WorkspacePage() {
-  const [selected, setSelected] = useState<string | null>("user");
+  const { currentProject } = useWorkspace();
+
+  // Requirements state
+  const [requirements, setRequirements] = useState<Requirement[]>([]);
+  const [reqsLoading, setReqsLoading] = useState(false);
+
+  // Architecture state
+  const [currentVersion, setCurrentVersion] = useState<ArchitectureVersion | null>(null);
+  const [canvasNodes, setCanvasNodes] = useState<CanvasNodeData[]>([]);
+  const [canvasEdges, setCanvasEdges] = useState<CanvasEdgeData[]>([]);
+  const [previewArchitecture, setPreviewArchitecture] = useState<ArchitecturePreview | null>(null);
+  const [archLoading, setArchLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Selection & UI state
+  const [selected, setSelected] = useState<string | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
   const [rightTab, setRightTab] = useState<"inspector" | "ai">("inspector");
+  const [consoleLogs, setConsoleLogs] = useState<ConsoleLogItem[]>([]);
+
+  // Log helper
+  const addLog = useCallback((text: string, tone: "ok" | "warn" | "err" = "ok") => {
+    setConsoleLogs((prev) => [...prev, { text, tone, time: formatTime() }]);
+  }, []);
+
+  // Update node position during dragging
+  const handleUpdateNodePos = useCallback((id: string, x: number, y: number) => {
+    setCanvasNodes((prev) => prev.map((n) => (n.id === id ? { ...n, x, y } : n)));
+  }, []);
+
+  // Fetch requirements
+  const fetchRequirements = useCallback(async () => {
+    if (!currentProject) return;
+    setReqsLoading(true);
+    try {
+      const data = await getRequirements(currentProject.id);
+      setRequirements(data);
+    } catch {
+      // Handled by global interceptor
+    } finally {
+      setReqsLoading(false);
+    }
+  }, [currentProject]);
+
+  // Fetch saved architecture from backend
+  const fetchArchitecture = useCallback(async () => {
+    if (!currentProject) return;
+    setArchLoading(true);
+    try {
+      const graph = await getArchitecture(currentProject.id);
+      if (graph.version) {
+        setCurrentVersion(graph.version);
+        setPreviewArchitecture(null);
+        if (graph.nodes.length > 0) {
+          const mappedNodes = graph.nodes.map(archNodeToCanvas);
+          setCanvasNodes(mappedNodes);
+          setSelected((prev) => (mappedNodes.some((n) => n.id === prev) ? prev : mappedNodes[0]?.id ?? null));
+        } else {
+          setCanvasNodes([]);
+          setSelected(null);
+        }
+
+        if (graph.edges.length > 0) {
+          const nodeKeyMap = new Map(graph.nodes.map((n) => [n.id, n.node_key]));
+          setCanvasEdges(
+            graph.edges
+              .map((e) => ({
+                from: nodeKeyMap.get(e.source_node_id) ?? "",
+                to: nodeKeyMap.get(e.target_node_id) ?? "",
+                relationship: e.relationship,
+                protocol: e.protocol ?? undefined,
+                description: e.description ?? undefined,
+              }))
+              .filter((e) => e.from && e.to)
+          );
+        } else {
+          setCanvasEdges([]);
+        }
+      } else {
+        // No saved version: canvas empty state
+        setCurrentVersion(null);
+        setPreviewArchitecture(null);
+        setCanvasNodes([]);
+        setCanvasEdges([]);
+        setSelected(null);
+      }
+    } catch {
+      // Handled by global interceptor
+    } finally {
+      setArchLoading(false);
+    }
+  }, [currentProject]);
+
+  // Initial load when currentProject changes
+  useEffect(() => {
+    fetchRequirements();
+    fetchArchitecture();
+    setConsoleLogs([]);
+  }, [fetchRequirements, fetchArchitecture]);
+
+  // Generate architecture preview
+  const handleGenerateArchitecture = async () => {
+    if (!currentProject) return;
+    if (requirements.length === 0) {
+      toast.error("Please add at least one requirement before generating an architecture.");
+      return;
+    }
+
+    setGenerating(true);
+    setConsoleLogs([
+      { tone: "ok", text: `Parsing Requirements (${requirements.length} active requirement${requirements.length === 1 ? "" : "s"})`, time: formatTime() },
+      { tone: "ok", text: "Analyzing Requirements: normalizing semantic tokens & entities", time: formatTime() },
+      { tone: "ok", text: "Detecting Capabilities: mapping keywords to architecture components", time: formatTime() },
+    ]);
+
+    try {
+      const response = await generateArchitecture(currentProject.id);
+      const preview = response.architecture;
+
+      const detectedCaps = preview.nodes.map((n) => n.name).join(", ");
+
+      setConsoleLogs((prev) => [
+        ...prev,
+        {
+          tone: "ok",
+          text: `Building Components: [${detectedCaps}]`,
+          time: formatTime(),
+        },
+        {
+          tone: "ok",
+          text: `Connecting Components: established ${preview.edges.length} architectural relationships`,
+          time: formatTime(),
+        },
+        { tone: "ok", text: "Validating Architecture schema contracts with Zod", time: formatTime() },
+        { tone: "ok", text: "Generating Layout: calculated hierarchical tier coordinates", time: formatTime() },
+        { tone: "ok", text: "Architecture Preview Ready (unsaved draft)", time: formatTime() },
+      ]);
+
+      setPreviewArchitecture(preview);
+
+      const mappedNodes: CanvasNodeData[] = preview.nodes.map((n) => ({
+        id: n.node_key,
+        label: n.name,
+        kind: n.type,
+        x: n.position_x,
+        y: n.position_y,
+        description: n.description ?? undefined,
+        technology: n.technology ?? undefined,
+        metadata: n.metadata,
+      }));
+
+      const mappedEdges: CanvasEdgeData[] = preview.edges.map((e) => ({
+        from: e.source_node_key,
+        to: e.target_node_key,
+        relationship: e.relationship,
+        protocol: e.protocol ?? undefined,
+        description: e.description ?? undefined,
+      }));
+
+      setCanvasNodes(mappedNodes);
+      setCanvasEdges(mappedEdges);
+      setSelected(mappedNodes[0]?.id ?? null);
+      toast.success("Architecture preview generated from requirements");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "Failed to generate architecture";
+      addLog(`Generation error: ${msg}`, "err");
+      toast.error(msg);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // Save current preview to database as an immutable version
+  const handleSaveVersion = async () => {
+    if (!currentProject || canvasNodes.length === 0) return;
+    setSaving(true);
+    addLog("Saving Architecture Version to PostgreSQL database...", "ok");
+
+    try {
+      const nextVersionNum = (currentVersion?.version_number ?? 0) + 1;
+      const savedGraph = await saveArchitectureVersion(currentProject.id, {
+        name: previewArchitecture?.name || `Architecture v${nextVersionNum}`,
+        description: previewArchitecture?.summary || `Generated from ${requirements.length} requirements`,
+        nodes: canvasNodes.map((n) => ({
+          node_key: n.id,
+          name: n.label,
+          type: n.kind as ArchitectureNodeType,
+          technology: n.technology ?? null,
+          description: n.description ?? null,
+          metadata: n.metadata ?? {},
+          position_x: n.x,
+          position_y: n.y,
+        })),
+        edges: canvasEdges.map((e) => ({
+          source_node_key: e.from,
+          target_node_key: e.to,
+          relationship: "calls",
+          protocol: e.protocol ?? null,
+          description: e.description ?? null,
+        })),
+      });
+
+      if (savedGraph.version) {
+        setCurrentVersion(savedGraph.version);
+        setPreviewArchitecture(null);
+        if (savedGraph.nodes.length > 0) {
+          setCanvasNodes(savedGraph.nodes.map(archNodeToCanvas));
+        }
+        addLog(
+          `Architecture Version v${savedGraph.version.version_number} persisted successfully`,
+          "ok"
+        );
+        toast.success(`Architecture Version v${savedGraph.version.version_number} saved`);
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "Failed to save architecture version";
+      addLog(`Failed to save version: ${msg}`, "err");
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Discard preview and revert to saved version
+  const handleDiscardPreview = () => {
+    fetchArchitecture();
+    addLog("Discarded temporary preview", "warn");
+    toast.info("Preview discarded");
+  };
+
   return (
     <div className="h-[calc(100vh-3rem)] flex flex-col">
-      <ProjectTimeline />
+      <ProjectTimeline
+        currentVersionNumber={currentVersion?.version_number}
+        isPreview={Boolean(previewArchitecture)}
+      />
       <div className="flex-1 min-h-0">
         <ResizablePanelGroup orientation="vertical">
           <ResizablePanel defaultSize={72} minSize={40}>
             <ResizablePanelGroup orientation="horizontal">
               <ResizablePanel defaultSize={28} minSize={18}>
-                <RequirementEditor />
+                <RequirementEditor
+                  requirements={requirements}
+                  loading={reqsLoading}
+                  onRefresh={fetchRequirements}
+                  onRequirementChanged={fetchRequirements}
+                />
               </ResizablePanel>
               <ResizableHandle withHandle />
               <ResizablePanel defaultSize={48} minSize={30}>
                 <ArchitectureCanvas
+                  canvasNodes={canvasNodes}
+                  canvasEdges={canvasEdges}
+                  currentVersion={currentVersion}
+                  previewArchitecture={previewArchitecture}
+                  requirementsCount={requirements.length}
+                  loading={archLoading}
+                  generating={generating}
+                  saving={saving}
                   selected={selected}
+                  selectedEdge={selectedEdge}
                   onSelect={(id) => {
                     setSelected(id);
+                    setSelectedEdge(null);
                     setRightTab("inspector");
                   }}
+                  onSelectEdge={(key) => {
+                    setSelectedEdge(key);
+                  }}
+                  onUpdateNodePos={handleUpdateNodePos}
+                  onGenerate={handleGenerateArchitecture}
+                  onSaveVersion={handleSaveVersion}
+                  onDiscardPreview={handleDiscardPreview}
+                  onReload={fetchArchitecture}
                 />
               </ResizablePanel>
               <ResizableHandle withHandle />
@@ -86,6 +403,8 @@ function WorkspacePage() {
                   tab={rightTab}
                   onTab={setRightTab}
                   selected={selected}
+                  canvasNodes={canvasNodes}
+                  canvasEdges={canvasEdges}
                   onClose={() => setSelected(null)}
                 />
               </ResizablePanel>
@@ -93,7 +412,11 @@ function WorkspacePage() {
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize={28} minSize={14}>
-            <GenerationConsole />
+            <GenerationConsole
+              logs={consoleLogs}
+              isGenerating={generating}
+              onClear={() => setConsoleLogs([])}
+            />
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>
@@ -113,44 +436,69 @@ const STAGES = [
   "Export",
 ];
 
-function ProjectTimeline() {
-  const currentIdx = 2;
+function ProjectTimeline({
+  currentVersionNumber,
+  isPreview,
+}: {
+  currentVersionNumber?: number;
+  isPreview?: boolean;
+}) {
+  const { currentProject } = useWorkspace();
+  const currentIdx = currentVersionNumber || isPreview ? 1 : 0;
+
   return (
-    <div className="h-11 border-b border-border bg-panel/60 flex items-center gap-2 px-4 overflow-x-auto">
-      <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0">
-        Pipeline
-      </span>
-      <div className="flex items-center gap-1">
-        {STAGES.map((stage, i) => {
-          const done = i < currentIdx;
-          const active = i === currentIdx;
-          return (
-            <div key={stage} className="flex items-center gap-1">
-              <div
-                className={
-                  "flex items-center gap-1.5 h-7 px-2.5 rounded border text-[11px] font-mono transition-colors " +
-                  (active
-                    ? "border-primary/50 bg-primary/10 text-primary"
-                    : done
-                      ? "border-success/30 bg-success/10 text-success"
-                      : "border-border bg-surface text-muted-foreground")
-                }
-              >
-                {done ? (
-                  <CheckCircle2 className="h-3 w-3" />
-                ) : active ? (
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                ) : (
-                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+    <div className="h-11 border-b border-border bg-panel/60 flex items-center justify-between gap-2 px-4 overflow-x-auto">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0">
+          Pipeline
+        </span>
+        <div className="flex items-center gap-1">
+          {STAGES.map((stage, i) => {
+            const done = i < currentIdx;
+            const active = i === currentIdx;
+            return (
+              <div key={stage} className="flex items-center gap-1">
+                <div
+                  className={
+                    "flex items-center gap-1.5 h-7 px-2.5 rounded border text-[11px] font-mono transition-colors " +
+                    (active
+                      ? "border-primary/50 bg-primary/10 text-primary"
+                      : done
+                        ? "border-success/30 bg-success/10 text-success"
+                        : "border-border bg-surface text-muted-foreground")
+                  }
+                >
+                  {done ? (
+                    <CheckCircle2 className="h-3 w-3" />
+                  ) : active ? (
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                  ) : (
+                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                  )}
+                  <span>{stage}</span>
+                </div>
+                {i < STAGES.length - 1 && (
+                  <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
                 )}
-                <span>{stage}</span>
               </div>
-              {i < STAGES.length - 1 && (
-                <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <span className="text-xs font-mono text-muted-foreground">
+          Project: <strong className="text-foreground">{currentProject ? currentProject.name : "Unassigned"}</strong>
+        </span>
+        {currentVersionNumber && (
+          <span className="h-5 px-1.5 rounded text-[10px] font-mono border border-success/40 bg-success/10 text-success">
+            v{currentVersionNumber}
+          </span>
+        )}
+        {isPreview && (
+          <span className="h-5 px-1.5 rounded text-[10px] font-mono border border-warning/40 bg-warning/10 text-warning">
+            preview
+          </span>
+        )}
       </div>
     </div>
   );
@@ -158,227 +506,774 @@ function ProjectTimeline() {
 
 /* ---------- requirement editor ---------- */
 
-const SECTIONS = [
-  { key: "func", label: "Functional Requirements", icon: FileCode2, count: 12 },
-  { key: "nfr", label: "Non-Functional Requirements", icon: Server, count: 8 },
-  { key: "auth", label: "Authentication", icon: Lock, count: 4 },
-  { key: "db", label: "Database", icon: Database, count: 6 },
-  { key: "cache", label: "Caching", icon: RefreshCw, count: 2 },
-  { key: "deploy", label: "Deployment", icon: Cloud, count: 3 },
-  { key: "perf", label: "Performance", icon: Sparkles, count: 5 },
-  { key: "sec", label: "Security", icon: Lock, count: 7 },
-  { key: "mon", label: "Monitoring", icon: Terminal, count: 3 },
-];
+function RequirementEditor({
+  requirements,
+  loading,
+  onRefresh,
+  onRequirementChanged,
+}: {
+  requirements: Requirement[];
+  loading: boolean;
+  onRefresh: () => void;
+  onRequirementChanged: () => void;
+}) {
+  const { currentProject } = useWorkspace();
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState("");
+  const [newContent, setNewContent] = useState("");
+  const [showNew, setShowNew] = useState(false);
 
-const SAMPLE_MD = `# Payments Platform
+  const handleCreate = async () => {
+    if (!currentProject || !newContent.trim()) return;
+    setSaving(true);
+    try {
+      await createRequirement(currentProject.id, { content: newContent.trim() });
+      setNewContent("");
+      setShowNew(false);
+      onRequirementChanged();
+      toast.success("Requirement created");
+    } catch {
+      // handled
+    } finally {
+      setSaving(false);
+    }
+  };
 
-## Functional Requirements
-- Users can create and confirm payments via card, wallet, and bank transfer.
-- Multi-tenant merchants with isolated ledgers and settlement schedules.
-- Idempotent webhook delivery with signed payloads and replay protection.
+  const handleStartEdit = (req: Requirement) => {
+    setEditingId(req.id);
+    setEditingContent(req.content);
+  };
 
-## Non-Functional Requirements
-- **Latency**: p95 < 120ms for /charges
-- **Availability**: 99.95% monthly SLA
-- **Throughput**: 4,000 rps sustained, 12,000 rps burst
+  const handleSaveEdit = async () => {
+    if (!currentProject || !editingId) return;
+    setSaving(true);
+    try {
+      await updateRequirement(currentProject.id, editingId, { content: editingContent });
+      setEditingId(null);
+      onRequirementChanged();
+      toast.success("Requirement updated");
+    } catch {
+      // handled
+    } finally {
+      setSaving(false);
+    }
+  };
 
-## Authentication
-- OAuth 2.1 + PKCE for merchant dashboards
-- HMAC-signed API keys for server-to-server
-- Short-lived JWTs (5m) with refresh rotation
+  const handleDelete = async (id: string) => {
+    if (!currentProject) return;
+    try {
+      await deleteRequirement(currentProject.id, id);
+      if (editingId === id) setEditingId(null);
+      onRequirementChanged();
+      toast.success("Requirement deleted");
+    } catch {
+      // handled
+    }
+  };
 
-## Database
-- Postgres 16, logical replicas per region
-- Event store on append-only ledger table
-- Partitioning by tenant_id / month
-
-## Caching
-- Redis Cluster for session and rate-limit state
-- Read-through cache on merchant configuration
-`;
-
-function RequirementEditor() {
-  const [active, setActive] = useState("func");
   return (
     <div className="h-full flex flex-col bg-panel/40">
       <PanelHeader
         label="requirements.md"
-        badge="draft"
+        badge={requirements.length > 0 ? String(requirements.length) : "0"}
         actions={
           <>
-            <IconGhost title="Import Markdown"><FileUp className="h-3.5 w-3.5" /></IconGhost>
-            <IconGhost title="Export"><Download className="h-3.5 w-3.5" /></IconGhost>
-            <IconGhost title="Save"><Save className="h-3.5 w-3.5" /></IconGhost>
-            <Button size="sm" className="h-7 px-2.5 text-xs">
-              <Play /> Generate Architecture
+            <IconGhost title="Refresh" onClick={onRefresh}><RefreshCw className="h-3.5 w-3.5" /></IconGhost>
+            {editingId && (
+              <IconGhost title="Save changes" onClick={handleSaveEdit}><Save className="h-3.5 w-3.5" /></IconGhost>
+            )}
+            <Button size="sm" className="h-7 px-2.5 text-xs" onClick={() => setShowNew(true)} disabled={!currentProject}>
+              <Plus /> Add Requirement
             </Button>
           </>
         }
       />
-      <div className="flex-1 min-h-0 grid grid-cols-[180px_minmax(0,1fr)]">
-        <div className="border-r border-border p-2 space-y-0.5 overflow-y-auto">
-          <div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-            Outline
+
+      {!currentProject ? (
+        <div className="flex-1 grid place-items-center">
+          <div className="text-center space-y-2">
+            <Layers className="h-8 w-8 text-muted-foreground mx-auto" />
+            <p className="text-xs text-muted-foreground">Select a project to view requirements</p>
           </div>
-          {SECTIONS.map((s) => {
-            const Icon = s.icon;
-            const on = active === s.key;
+        </div>
+      ) : loading ? (
+        <div className="flex-1 grid place-items-center">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1.5">
+          {showNew && (
+            <div className="rounded border border-primary/40 bg-background p-2 space-y-2">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">New Requirement</div>
+              <textarea
+                autoFocus
+                value={newContent}
+                onChange={(e) => setNewContent(e.target.value)}
+                placeholder="Describe requirement (e.g. User auth, PostgreSQL database, Semantic search with PDF upload)..."
+                rows={3}
+                className="w-full resize-none bg-surface rounded border border-border px-2 py-1.5 text-xs font-mono focus-visible:outline-none focus-visible:border-primary/60"
+              />
+              <div className="flex gap-1.5">
+                <Button size="sm" className="h-6 px-2 text-[11px]" onClick={handleCreate} disabled={saving || !newContent.trim()}>
+                  {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
+                </Button>
+                <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={() => { setShowNew(false); setNewContent(""); }}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {requirements.length === 0 && !showNew && (
+            <div className="py-12 text-center space-y-3">
+              <FileCode2 className="h-8 w-8 text-muted-foreground mx-auto" />
+              <p className="text-xs text-muted-foreground">No requirements yet. Add your first requirement to get started.</p>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowNew(true)}>
+                <Plus className="h-3 w-3 mr-1" /> Add First Requirement
+              </Button>
+            </div>
+          )}
+
+          {requirements.map((req, i) => {
+            const isEditing = editingId === req.id;
             return (
-              <button
-                key={s.key}
-                onClick={() => setActive(s.key)}
+              <div
+                key={req.id}
                 className={
-                  "w-full flex items-center gap-2 h-7 px-2 rounded text-xs text-left transition-colors " +
-                  (on
-                    ? "bg-surface text-foreground border border-border"
-                    : "text-muted-foreground hover:text-foreground hover:bg-surface/60 border border-transparent")
+                  "rounded border bg-background p-2 transition-colors " +
+                  (isEditing ? "border-primary" : "border-border hover:border-primary/40")
                 }
               >
-                <Icon className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{s.label}</span>
-                <span className="ml-auto font-mono text-[10px] text-muted-foreground">{s.count}</span>
-              </button>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-mono text-muted-foreground">#{i + 1}</span>
+                    <span className="text-[10px] font-mono text-primary font-semibold">v{req.version}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <IconGhost title="Edit" onClick={() => handleStartEdit(req)}>
+                      <Pencil className="h-3 w-3" />
+                    </IconGhost>
+                    <IconGhost title="Delete" onClick={() => handleDelete(req.id)}>
+                      <Trash2 className="h-3 w-3 text-destructive" />
+                    </IconGhost>
+                  </div>
+                </div>
+
+                {isEditing ? (
+                  <div className="space-y-1.5">
+                    <textarea
+                      value={editingContent}
+                      onChange={(e) => setEditingContent(e.target.value)}
+                      rows={3}
+                      className="w-full resize-none bg-surface rounded border border-border px-2 py-1 text-xs font-mono focus-visible:outline-none focus-visible:border-primary"
+                    />
+                    <div className="flex gap-1.5">
+                      <Button size="sm" className="h-6 px-2 text-[11px]" onClick={handleSaveEdit} disabled={saving}>
+                        Save
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={() => setEditingId(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs font-mono whitespace-pre-wrap leading-relaxed text-foreground/90">
+                    {req.content}
+                  </p>
+                )}
+              </div>
             );
           })}
         </div>
-        <div className="min-h-0 overflow-hidden flex flex-col">
-          <textarea
-            defaultValue={SAMPLE_MD}
-            spellCheck={false}
-            className="flex-1 w-full resize-none bg-background border-0 border-b border-border px-4 py-3 text-[13px] font-mono leading-relaxed focus-visible:outline-none"
-          />
-          <div className="h-7 px-3 flex items-center gap-3 text-[11px] font-mono text-muted-foreground">
-            <span>Ln 24, Col 42</span>
-            <span>Markdown</span>
-            <span className="ml-auto text-success">● saved</span>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
-/* ---------- architecture canvas ---------- */
+/* ---------- edge path calculation with connection handles ---------- */
 
-type Node = { id: string; label: string; kind: string; x: number; y: number };
-type Edge = { from: string; to: string };
+function getEdgePathAndHandles(
+  source: { x: number; y: number },
+  target: { x: number; y: number },
+  w = NODE_WIDTH,
+  h = NODE_HEIGHT
+) {
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
 
-const NODES: Node[] = [
-  { id: "fe", label: "Frontend", kind: "web", x: 80, y: 40 },
-  { id: "gw", label: "API Gateway", kind: "gateway", x: 80, y: 130 },
-  { id: "auth", label: "Auth Service", kind: "service", x: 80, y: 230 },
-  { id: "user", label: "User Service", kind: "service", x: 260, y: 230 },
-  { id: "notif", label: "Notification Service", kind: "service", x: 440, y: 230 },
-  { id: "redis", label: "Redis", kind: "cache", x: 80, y: 340 },
-  { id: "mq", label: "RabbitMQ", kind: "queue", x: 260, y: 340 },
-  { id: "mongo", label: "MongoDB", kind: "db", x: 440, y: 340 },
-  { id: "s3", label: "Object Storage", kind: "storage", x: 620, y: 340 },
-];
+  let sx: number;
+  let sy: number;
+  let tx: number;
+  let ty: number;
+  let c1x: number;
+  let c1y: number;
+  let c2x: number;
+  let c2y: number;
 
-const EDGES: Edge[] = [
-  { from: "fe", to: "gw" },
-  { from: "gw", to: "auth" },
-  { from: "gw", to: "user" },
-  { from: "gw", to: "notif" },
-  { from: "auth", to: "redis" },
-  { from: "user", to: "mongo" },
-  { from: "user", to: "mq" },
-  { from: "notif", to: "mq" },
-  { from: "notif", to: "s3" },
-];
+  if (dy > 35) {
+    // Target is clearly below source -> bottom handle to top handle
+    sx = source.x + w / 2;
+    sy = source.y + h;
+    tx = target.x + w / 2;
+    ty = target.y;
+    const curvature = Math.max(30, (ty - sy) * 0.45);
+    c1x = sx;
+    c1y = sy + curvature;
+    c2x = tx;
+    c2y = ty - curvature;
+  } else if (dy < -35) {
+    // Target is clearly above source -> top handle to bottom handle
+    sx = source.x + w / 2;
+    sy = source.y;
+    tx = target.x + w / 2;
+    ty = target.y + h;
+    const curvature = Math.max(30, (sy - ty) * 0.45);
+    c1x = sx;
+    c1y = sy - curvature;
+    c2x = tx;
+    c2y = ty + curvature;
+  } else if (dx >= 0) {
+    // Target is to the right -> right handle to left handle
+    sx = source.x + w;
+    sy = source.y + h / 2;
+    tx = target.x;
+    ty = target.y + h / 2;
+    const curvature = Math.max(30, (tx - sx) * 0.45);
+    c1x = sx + curvature;
+    c1y = sy;
+    c2x = tx - curvature;
+    c2y = ty;
+  } else {
+    // Target is to the left -> left handle to right handle
+    sx = source.x;
+    sy = source.y + h / 2;
+    tx = target.x + w;
+    ty = target.y + h / 2;
+    const curvature = Math.max(30, (sx - tx) * 0.45);
+    c1x = sx - curvature;
+    c1y = sy;
+    c2x = tx + curvature;
+    c2y = ty;
+  }
+
+  const d = `M ${sx} ${sy} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${tx} ${ty}`;
+  const midX = 0.5 * (sx + tx);
+  const midY = 0.5 * (sy + ty);
+
+  return { d, sx, sy, tx, ty, midX, midY };
+}
+
+/* ---------- architecture canvas with pan, zoom & drag ---------- */
 
 function ArchitectureCanvas({
+  canvasNodes,
+  canvasEdges,
+  currentVersion,
+  previewArchitecture,
+  requirementsCount,
+  loading,
+  generating,
+  saving,
   selected,
+  selectedEdge,
   onSelect,
+  onSelectEdge,
+  onUpdateNodePos,
+  onGenerate,
+  onSaveVersion,
+  onDiscardPreview,
+  onReload,
 }: {
+  canvasNodes: CanvasNodeData[];
+  canvasEdges: CanvasEdgeData[];
+  currentVersion: ArchitectureVersion | null;
+  previewArchitecture: ArchitecturePreview | null;
+  requirementsCount: number;
+  loading: boolean;
+  generating: boolean;
+  saving: boolean;
   selected: string | null;
+  selectedEdge: string | null;
   onSelect: (id: string) => void;
+  onSelectEdge: (key: string) => void;
+  onUpdateNodePos: (id: string, x: number, y: number) => void;
+  onGenerate: () => void;
+  onSaveVersion: () => void;
+  onDiscardPreview: () => void;
+  onReload: () => void;
 }) {
-  const [zoom, setZoom] = useState(1);
-  const width = 760;
-  const height = 420;
+  const { currentProject } = useWorkspace();
+
+  // Canvas Viewport transform state
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 60, y: 30 });
+  const [zoom, setZoom] = useState<number>(1.0);
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Node Dragging state
+  const [draggingNode, setDraggingNode] = useState<{
+    id: string;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
+
+  const containerRef = useRef<HTMLDivElement>(null);
 
   function nodePos(id: string) {
-    return NODES.find((n) => n.id === id)!;
+    return canvasNodes.find((n) => n.id === id);
   }
+
+  // Pan event handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    // Don't pan if clicking directly on a node card
+    if ((e.target as HTMLElement).closest(".canvas-node-card")) return;
+    setIsPanning(true);
+    setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (draggingNode) {
+      const newX = Math.round((e.clientX - pan.x) / zoom - draggingNode.offsetX);
+      const newY = Math.round((e.clientY - pan.y) / zoom - draggingNode.offsetY);
+      onUpdateNodePos(draggingNode.id, newX, newY);
+    } else if (isPanning) {
+      setPan({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y,
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsPanning(false);
+    setDraggingNode(null);
+  };
+
+  // Zoom via mouse wheel
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.08 : 0.92;
+    const newZoom = Math.min(2.0, Math.max(0.4, zoom * factor));
+
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const newPanX = mouseX - (mouseX - pan.x) * (newZoom / zoom);
+      const newPanY = mouseY - (mouseY - pan.y) * (newZoom / zoom);
+      setZoom(newZoom);
+      setPan({ x: newPanX, y: newPanY });
+    } else {
+      setZoom(newZoom);
+    }
+  };
+
+  // Node mouse down initiates drag
+  const handleNodeMouseDown = (e: React.MouseEvent, node: CanvasNodeData) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    onSelect(node.id);
+    const mouseCanvasX = (e.clientX - pan.x) / zoom;
+    const mouseCanvasY = (e.clientY - pan.y) / zoom;
+    setDraggingNode({
+      id: node.id,
+      offsetX: mouseCanvasX - node.x,
+      offsetY: mouseCanvasY - node.y,
+    });
+  };
+
+  // Fit View
+  const handleFitView = useCallback(() => {
+    if (canvasNodes.length === 0 || !containerRef.current) {
+      setPan({ x: 60, y: 30 });
+      setZoom(1.0);
+      return;
+    }
+    const xs = canvasNodes.map((n) => n.x);
+    const ys = canvasNodes.map((n) => n.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs) + NODE_WIDTH;
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys) + NODE_HEIGHT;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const pad = 50;
+    const availW = Math.max(100, rect.width - pad * 2);
+    const availH = Math.max(100, rect.height - pad * 2);
+    const graphW = Math.max(100, maxX - minX);
+    const graphH = Math.max(100, maxY - minY);
+
+    const fitZoom = Math.min(1.1, Math.max(0.5, Math.min(availW / graphW, availH / graphH)));
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    setZoom(fitZoom);
+    setPan({
+      x: Math.round(rect.width / 2 - centerX * fitZoom),
+      y: Math.round(rect.height / 2 - centerY * fitZoom),
+    });
+  }, [canvasNodes]);
+
+  // Auto Layout
+  const handleAutoLayout = useCallback(() => {
+    if (canvasNodes.length === 0) return;
+    const tierMap: Record<string, number> = {
+      frontend: 0,
+      gateway: 1,
+      api: 1,
+      auth: 2,
+      service: 2,
+      worker: 2,
+      monitoring: 2,
+      database: 3,
+      storage: 3,
+      cache: 3,
+      queue: 3,
+      external_service: 3,
+      infrastructure: 3,
+    };
+
+    const tiers: Map<number, CanvasNodeData[]> = new Map();
+    for (const node of canvasNodes) {
+      const tier = tierMap[node.kind] ?? 2;
+      if (!tiers.has(tier)) tiers.set(tier, []);
+      tiers.get(tier)!.push(node);
+    }
+
+    const tierY = [40, 160, 290, 430];
+    const spacing = 190;
+
+    for (let t = 0; t <= 3; t++) {
+      const inTier = tiers.get(t) || [];
+      if (inTier.length > 0) {
+        const totalW = (inTier.length - 1) * spacing;
+        const startX = Math.max(60, 400 - totalW / 2);
+        inTier.forEach((node, i) => {
+          onUpdateNodePos(node.id, Math.round(startX + i * spacing), tierY[t]);
+        });
+      }
+    }
+
+    toast.info("Auto-layout applied");
+    setTimeout(handleFitView, 50);
+  }, [canvasNodes, onUpdateNodePos, handleFitView]);
+
+  const badgeText = previewArchitecture
+    ? "preview (unsaved)"
+    : currentVersion
+      ? `v${currentVersion.version_number} · ${currentVersion.status}`
+      : "no version";
+
+  const badgeColor = previewArchitecture
+    ? "border-warning/50 bg-warning/15 text-warning"
+    : currentVersion
+      ? "border-success/40 bg-success/10 text-success"
+      : "border-border bg-surface text-muted-foreground";
 
   return (
     <div className="h-full flex flex-col bg-panel/30">
       <PanelHeader
         label="architecture.canvas"
-        badge="live"
+        badge={badgeText}
+        badgeClass={badgeColor}
         actions={
           <>
-            <IconGhost title="Zoom out" onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}>
+            {(loading || generating) && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            <IconGhost title="Zoom out" onClick={() => setZoom((z) => Math.max(0.4, Number((z - 0.1).toFixed(2))))}>
               <ZoomOut className="h-3.5 w-3.5" />
             </IconGhost>
-            <div className="h-7 px-2 grid place-items-center rounded border border-border bg-surface text-[11px] font-mono text-muted-foreground w-14 text-center">
+            <button
+              onClick={() => { setZoom(1.0); }}
+              title="Click to reset zoom to 100%"
+              className="h-7 px-2 grid place-items-center rounded border border-border bg-surface text-[11px] font-mono text-muted-foreground hover:text-foreground w-14 text-center transition-colors"
+            >
               {Math.round(zoom * 100)}%
-            </div>
-            <IconGhost title="Zoom in" onClick={() => setZoom((z) => Math.min(1.8, z + 0.1))}>
+            </button>
+            <IconGhost title="Zoom in" onClick={() => setZoom((z) => Math.min(2.0, Number((z + 0.1).toFixed(2))))}>
               <ZoomIn className="h-3.5 w-3.5" />
             </IconGhost>
+            <IconGhost title="Fit view" onClick={handleFitView}>
+              <Maximize2 className="h-3.5 w-3.5" />
+            </IconGhost>
+            <IconGhost title="Auto layout" onClick={handleAutoLayout}>
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </IconGhost>
             <div className="h-4 w-px bg-border mx-1" />
-            <IconGhost title="Auto layout"><RefreshCw className="h-3.5 w-3.5" /></IconGhost>
-            <IconGhost title="Fit"><Maximize2 className="h-3.5 w-3.5" /></IconGhost>
-            <IconGhost title="Export PNG"><Download className="h-3.5 w-3.5" /></IconGhost>
+            <IconGhost title="Reload saved version" onClick={onReload}>
+              <RefreshCw className="h-3.5 w-3.5" />
+            </IconGhost>
+
+            {previewArchitecture ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={onDiscardPreview}
+                  disabled={saving}
+                >
+                  Discard
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-7 px-2.5 text-xs font-semibold gap-1.5 shadow-sm"
+                  onClick={onSaveVersion}
+                  disabled={saving || !currentProject}
+                  title="Persist this preview as a new immutable architecture version"
+                >
+                  {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                  Save Version
+                </Button>
+              </>
+            ) : canvasNodes.length > 0 ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2.5 text-xs gap-1.5"
+                onClick={onGenerate}
+                disabled={generating || requirementsCount === 0 || !currentProject}
+                title="Regenerate architecture from updated requirements"
+              >
+                {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                Regenerate
+              </Button>
+            ) : null}
           </>
         }
       />
-      <div className="flex-1 min-h-0 relative overflow-hidden grid-bg bg-background">
-        <div
-          className="absolute inset-0 origin-top-left transition-transform"
-          style={{ transform: `scale(${zoom})` }}
-        >
-          <svg width={width} height={height} className="absolute top-6 left-6 overflow-visible">
-            <defs>
-              <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M0,0 L10,5 L0,10 z" fill="currentColor" className="text-primary/70" />
-              </marker>
-            </defs>
-            {EDGES.map((e, i) => {
-              const a = nodePos(e.from);
-              const b = nodePos(e.to);
-              const x1 = a.x + 70;
-              const y1 = a.y + 26;
-              const x2 = b.x + 70;
-              const y2 = b.y;
-              const mid = (y1 + y2) / 2;
-              const d = `M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`;
-              return (
-                <path
-                  key={i}
-                  d={d}
-                  fill="none"
-                  strokeWidth="1.25"
-                  className="text-primary/60"
-                  stroke="currentColor"
-                  strokeDasharray="140"
-                  strokeDashoffset="0"
-                  markerEnd="url(#arrow)"
+
+      <div
+        ref={containerRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onWheel={handleWheel}
+        className={
+          "flex-1 min-h-0 relative overflow-hidden grid-bg bg-background select-none " +
+          (isPanning ? "cursor-grabbing" : draggingNode ? "cursor-grabbing" : "cursor-grab")
+        }
+      >
+        {canvasNodes.length === 0 ? (
+          /* Empty state when 0 architecture versions exist */
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center select-none pointer-events-auto">
+            <div className="max-w-sm space-y-4">
+              <div className="mx-auto h-12 w-12 rounded-xl border border-border bg-panel flex items-center justify-center shadow-sm">
+                <Boxes className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-sm font-display font-semibold tracking-tight text-foreground">
+                  No architecture generated yet
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {requirementsCount === 0
+                    ? "Add requirements in the left panel to begin, then generate an architecture."
+                    : "Add requirements and generate an architecture."}
+                </p>
+              </div>
+
+              <div className="pt-1 flex flex-col items-center gap-2">
+                <Button
+                  onClick={onGenerate}
+                  disabled={generating || requirementsCount === 0 || !currentProject}
+                  className="h-8 px-4 text-xs font-medium gap-1.5"
                 >
-                  <animate
-                    attributeName="stroke-dashoffset"
-                    from="140"
-                    to="0"
-                    dur="1.8s"
-                    begin={`${i * 0.15}s`}
-                    fill="freeze"
-                  />
-                </path>
-              );
-            })}
-          </svg>
-          {NODES.map((n) => (
-            <CanvasNode
-              key={n.id}
-              node={n}
-              selected={selected === n.id}
-              onClick={() => onSelect(n.id)}
+                  {generating ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Generating Architecture…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Generate Architecture
+                    </>
+                  )}
+                </Button>
+                {requirementsCount === 0 && (
+                  <span className="text-[11px] font-mono text-muted-foreground">
+                    (Requires at least 1 requirement)
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Real Architecture Viewport with Pan, Zoom & Drag */
+          <>
+            <div
+              className="absolute inset-0 origin-top-left pointer-events-none"
+              style={{
+                transform: `translate3d(${pan.x}px, ${pan.y}px, 0px) scale(${zoom})`,
+                transformOrigin: "0 0",
+              }}
+            >
+              {/* SVG Edges Layer */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
+                <defs>
+                  <marker
+                    id="edge-arrow"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 1 L 9 5 L 0 9 z" fill="currentColor" className="text-primary/75" />
+                  </marker>
+                  <marker
+                    id="edge-arrow-active"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 1 L 9 5 L 0 9 z" fill="currentColor" className="text-primary" />
+                  </marker>
+                </defs>
+
+                {canvasEdges.map((e, i) => {
+                  const srcNode = nodePos(e.from);
+                  const tgtNode = nodePos(e.to);
+                  if (!srcNode || !tgtNode) return null;
+
+                  const { d, midX, midY } = getEdgePathAndHandles(srcNode, tgtNode);
+                  const isEdgeActive =
+                    selected === e.from || selected === e.to || selectedEdge === `${e.from}->${e.to}`;
+
+                  const label =
+                    e.protocol ||
+                    (e.relationship === "authenticates"
+                      ? "AUTH"
+                      : e.relationship === "reads" || e.relationship === "writes"
+                        ? "DATABASE"
+                        : e.relationship === "publishes" || e.relationship === "subscribes"
+                          ? "QUEUE"
+                          : "HTTP");
+
+                  return (
+                    <g
+                      key={`${e.from}->${e.to}-${i}`}
+                      className="group cursor-pointer pointer-events-auto"
+                      onClick={(evt) => {
+                        evt.stopPropagation();
+                        onSelectEdge(`${e.from}->${e.to}`);
+                      }}
+                    >
+                      {/* Transparent wider hit zone */}
+                      <path d={d} fill="none" stroke="transparent" strokeWidth="16" />
+
+                      {/* Static guide path */}
+                      <path
+                        d={d}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={isEdgeActive ? "2.2" : "1.25"}
+                        className={
+                          isEdgeActive
+                            ? "text-primary/80 transition-colors"
+                            : "text-border/80 group-hover:text-primary/50 transition-colors"
+                        }
+                      />
+
+                      {/* Animated engineering flow line */}
+                      <path
+                        d={d}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={isEdgeActive ? "2" : "1.2"}
+                        strokeDasharray="6 6"
+                        className={
+                          isEdgeActive
+                            ? "text-primary transition-colors"
+                            : "text-primary/70 group-hover:text-primary transition-colors"
+                        }
+                        markerEnd={isEdgeActive ? "url(#edge-arrow-active)" : "url(#edge-arrow)"}
+                      >
+                        <animate
+                          attributeName="stroke-dashoffset"
+                          from="24"
+                          to="0"
+                          dur={isEdgeActive ? "0.9s" : "1.5s"}
+                          repeatCount="indefinite"
+                        />
+                      </path>
+
+                      {/* Relationship/Protocol Pill on wire */}
+                      <foreignObject
+                        x={midX - 35}
+                        y={midY - 10}
+                        width="70"
+                        height="20"
+                        className="overflow-visible pointer-events-none"
+                      >
+                        <div className="flex justify-center items-center w-full h-full">
+                          <span
+                            className={
+                              "px-1.5 py-0.5 rounded text-[8.5px] font-mono tracking-wider uppercase border shadow-xs select-none transition-all " +
+                              (isEdgeActive
+                                ? "border-primary bg-panel text-primary font-semibold ring-1 ring-primary/40"
+                                : "border-border/80 bg-background/90 text-muted-foreground group-hover:border-primary/40 group-hover:text-foreground")
+                            }
+                          >
+                            {label}
+                          </span>
+                        </div>
+                      </foreignObject>
+                    </g>
+                  );
+                })}
+              </svg>
+
+              {/* HTML Nodes Layer */}
+              {canvasNodes.map((n) => (
+                <CanvasNode
+                  key={n.id}
+                  node={n}
+                  selected={selected === n.id}
+                  onMouseDown={(e) => handleNodeMouseDown(e, n)}
+                  onClick={() => onSelect(n.id)}
+                />
+              ))}
+            </div>
+
+            {/* Minimap */}
+            <LiveMiniMap
+              nodes={canvasNodes}
+              selected={selected}
+              pan={pan}
+              zoom={zoom}
+              onNavigate={(targetX, targetY) => {
+                if (containerRef.current) {
+                  const rect = containerRef.current.getBoundingClientRect();
+                  setPan({
+                    x: Math.round(rect.width / 2 - targetX * zoom),
+                    y: Math.round(rect.height / 2 - targetY * zoom),
+                  });
+                }
+              }}
             />
-          ))}
-        </div>
-        <MiniMap selected={selected} />
+
+            {/* Status Pill in Canvas */}
+            <div className="absolute top-3 left-3 flex items-center gap-2 select-none pointer-events-none">
+              {previewArchitecture ? (
+                <div className="flex items-center gap-2 px-2.5 py-1 rounded border border-warning/40 bg-warning/10 text-[11px] font-mono text-warning backdrop-blur-sm shadow-sm pointer-events-auto">
+                  <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
+                  <span>Architecture Preview (unsaved) — click "Save Version" to persist</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-2 py-0.5 rounded border border-border/60 bg-panel/70 text-[10px] font-mono text-muted-foreground backdrop-blur-xs">
+                  <span>Hold & drag canvas to pan · drag nodes to move</span>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -387,133 +1282,158 @@ function ArchitectureCanvas({
 function CanvasNode({
   node,
   selected,
+  onMouseDown,
   onClick,
 }: {
-  node: Node;
+  node: CanvasNodeData;
   selected: boolean;
+  onMouseDown: (e: React.MouseEvent) => void;
   onClick: () => void;
 }) {
   const kindMap: Record<string, string> = {
-    web: "border-info/40",
+    frontend: "border-info/40",
     gateway: "border-primary/50",
     service: "border-border",
+    backend: "border-border",
     cache: "border-warning/40",
     queue: "border-warning/40",
-    db: "border-success/40",
+    database: "border-success/40",
     storage: "border-success/40",
+    auth: "border-primary/40",
+    worker: "border-border",
+    api: "border-border",
+    monitoring: "border-info/30",
+    infrastructure: "border-border",
+    external_service: "border-muted-foreground/30",
   };
+
   return (
-    <button
+    <div
       className={
-        "absolute w-[140px] rounded border bg-panel shadow-sm select-none text-left transition-all " +
-        (selected ? "border-primary ring-1 ring-primary/40 shadow-md" : kindMap[node.kind] + " hover:border-primary/50")
+        "canvas-node-card absolute w-[160px] h-[58px] rounded border bg-panel shadow-sm select-none text-left transition-shadow pointer-events-auto cursor-grab active:cursor-grabbing group " +
+        (selected
+          ? "border-primary ring-1 ring-primary/60 shadow-md z-10"
+          : (kindMap[node.kind] ?? "border-border") + " hover:border-primary/50 z-1")
       }
       style={{ left: node.x, top: node.y }}
+      onMouseDown={onMouseDown}
       onClick={onClick}
     >
-      <div className="flex items-center gap-1.5 h-6 px-2 border-b border-border">
-        <span className="h-1.5 w-1.5 rounded-full bg-primary/70" />
-        <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-          {node.kind}
-        </span>
+      {/* Visual Port Connection Handles on Node Borders */}
+      <span className="absolute -top-1 left-1/2 -translate-x-1/2 h-2 w-2 rounded-full border border-primary/50 bg-background group-hover:scale-125 transition-transform pointer-events-none" />
+      <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-2 w-2 rounded-full border border-primary/50 bg-background group-hover:scale-125 transition-transform pointer-events-none" />
+      <span className="absolute top-1/2 -left-1 -translate-y-1/2 h-2 w-2 rounded-full border border-primary/50 bg-background group-hover:scale-125 transition-transform pointer-events-none" />
+      <span className="absolute top-1/2 -right-1 -translate-y-1/2 h-2 w-2 rounded-full border border-primary/50 bg-background group-hover:scale-125 transition-transform pointer-events-none" />
+
+      {/* Node Header */}
+      <div className="flex items-center justify-between h-[22px] px-2 border-b border-border bg-surface/50 rounded-t">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary/80 shrink-0" />
+          <span className="text-[9.5px] font-mono uppercase tracking-wider text-muted-foreground truncate">
+            {node.kind}
+          </span>
+        </div>
+        <Move className="h-2.5 w-2.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
       </div>
-      <div className="px-2 py-2 text-xs font-medium">{node.label}</div>
-    </button>
+
+      {/* Node Body */}
+      <div className="px-2 py-1 flex flex-col justify-center h-[34px]">
+        <div className="text-xs font-medium truncate leading-tight" title={node.label}>
+          {node.label}
+        </div>
+        {node.technology && (
+          <div className="text-[9.5px] font-mono text-muted-foreground truncate leading-tight mt-0.5">
+            {node.technology}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
-function MiniMap({ selected }: { selected: string | null }) {
+function LiveMiniMap({
+  nodes,
+  selected,
+  pan,
+  zoom,
+  onNavigate,
+}: {
+  nodes: CanvasNodeData[];
+  selected: string | null;
+  pan: { x: number; y: number };
+  zoom: number;
+  onNavigate: (x: number, y: number) => void;
+}) {
+  if (nodes.length === 0) return null;
+
+  const xs = nodes.map((n) => n.x);
+  const ys = nodes.map((n) => n.y);
+  const minX = Math.min(...xs, 0);
+  const maxX = Math.max(...xs, 600) + NODE_WIDTH;
+  const minY = Math.min(...ys, 0);
+  const maxY = Math.max(...ys, 450) + NODE_HEIGHT;
+
+  const width = Math.max(200, maxX - minX);
+  const height = Math.max(150, maxY - minY);
+
+  const scaleX = 180 / width;
+  const scaleY = 110 / height;
+  const mapScale = Math.min(scaleX, scaleY);
+
+  const handleMiniMapClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const targetCanvasX = minX + clickX / mapScale;
+    const targetCanvasY = minY + clickY / mapScale;
+    onNavigate(targetCanvasX, targetCanvasY);
+  };
+
   return (
-    <div className="absolute bottom-3 right-3 w-48 h-32 rounded border border-border bg-panel/90 backdrop-blur-sm overflow-hidden shadow-lg">
-      <div className="h-5 px-2 flex items-center justify-between border-b border-border">
+    <div className="absolute bottom-3 right-3 w-48 h-32 rounded border border-border bg-panel/90 backdrop-blur-sm overflow-hidden shadow-lg select-none">
+      <div className="h-5 px-2 flex items-center justify-between border-b border-border bg-surface/50">
         <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Minimap</span>
-        <div className="flex gap-0.5">
-          <button className="h-3 w-3 grid place-items-center rounded border border-border text-muted-foreground">
-            <Plus className="h-2 w-2" />
-          </button>
-          <button className="h-3 w-3 grid place-items-center rounded border border-border text-muted-foreground">
-            <Minus className="h-2 w-2" />
-          </button>
-        </div>
+        <span className="text-[9px] font-mono text-muted-foreground">{nodes.length} nodes</span>
       </div>
-      <div className="relative h-[calc(100%-1.25rem)] grid-bg cursor-pointer">
-        {NODES.map((n) => (
+      <div
+        className="relative h-[calc(100%-1.25rem)] grid-bg cursor-pointer"
+        onClick={handleMiniMapClick}
+      >
+        {nodes.map((n) => (
           <div
             key={n.id}
             className={
-              "absolute h-1.5 w-3 rounded-sm " +
-              (selected === n.id ? "bg-primary ring-1 ring-primary/60" : "bg-primary/50")
+              "absolute rounded-xs transition-colors " +
+              (selected === n.id ? "bg-primary ring-1 ring-primary/80" : "bg-primary/50")
             }
-            style={{ left: n.x / 6.5, top: (n.y / 6.5) + 4 }}
+            style={{
+              left: Math.max(2, (n.x - minX) * mapScale),
+              top: Math.max(2, (n.y - minY) * mapScale),
+              width: Math.max(6, NODE_WIDTH * mapScale),
+              height: Math.max(4, NODE_HEIGHT * mapScale),
+            }}
           />
         ))}
-        <div className="absolute inset-2 border border-primary/60 rounded-sm pointer-events-none" />
+
+        {/* Viewport Indicator */}
+        <div
+          className="absolute border border-primary/60 bg-primary/10 rounded-xs pointer-events-none"
+          style={{
+            left: Math.max(0, (-pan.x / zoom - minX) * mapScale),
+            top: Math.max(0, (-pan.y / zoom - minY) * mapScale),
+            width: Math.max(12, (500 / zoom) * mapScale),
+            height: Math.max(10, (300 / zoom) * mapScale),
+          }}
+        />
       </div>
     </div>
   );
 }
 
-/* ---------- AI recommendations ---------- */
+/* ---------- dynamic right pane (inspector + architecture insights) ---------- */
 
-const RECS = [
-  { key: "auth", title: "Authentication", body: "Add refresh-token rotation and enforce PKCE on all OAuth flows." },
-  { key: "perf", title: "Performance", body: "Introduce a read replica for the Orders service; p95 currently 210ms." },
-  { key: "cache", title: "Caching", body: "Cache merchant configuration in Redis (60s TTL) to reduce DB QPS by 35%." },
-  { key: "scale", title: "Scalability", body: "Move notification fan-out to a queue-based worker pool." },
-  { key: "sec", title: "Security", body: "Missing rate limit on /login. Consider 10 req/min per IP with WAF fallback." },
-  { key: "deploy", title: "Deployment", body: "Blue/green deploys for Payment Service to minimize customer-facing incidents." },
-  { key: "mon", title: "Monitoring", body: "Instrument RED metrics on the API Gateway and route them to Prometheus." },
-  { key: "test", title: "Testing", body: "Contract tests between Auth and User services would catch 78% of past incidents." },
-];
-
-function AIRecommendations() {
-  const [open, setOpen] = useState<string | null>("auth");
-  return (
-    <div className="h-full flex flex-col bg-panel/40">
-      <PanelHeader
-        label="ai.recommendations"
-        badge={`${RECS.length}`}
-        actions={<IconGhost title="Re-analyze"><RefreshCw className="h-3.5 w-3.5" /></IconGhost>}
-      />
-      <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1.5">
-        {RECS.map((r) => {
-          const isOpen = open === r.key;
-          return (
-            <div key={r.key} className="rounded border border-border bg-background overflow-hidden">
-              <button
-                onClick={() => setOpen(isOpen ? null : r.key)}
-                className="w-full flex items-center gap-2 h-8 px-2.5 text-left hover:bg-surface/60 transition-colors"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                <span className="text-xs font-medium">{r.title}</span>
-                <ChevronDown
-                  className={"h-3.5 w-3.5 ml-auto text-muted-foreground transition-transform " + (isOpen ? "rotate-180" : "")}
-                />
-              </button>
-              {isOpen && (
-                <div className="border-t border-border p-2.5 space-y-2">
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">{r.body}</p>
-                  <div className="flex gap-1.5">
-                    <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]">
-                      <Check className="h-3 w-3" /> Apply
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]">
-                      Details
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ---------- right pane (inspector + AI) ---------- */
-
-type Inspector = {
+type DynamicInspector = {
   id: string;
   name: string;
   kind: string;
@@ -530,179 +1450,118 @@ type Inspector = {
   suggestions: string[];
 };
 
-const INSPECTOR: Record<string, Inspector> = {
-  fe: {
-    id: "fe",
-    name: "Frontend",
-    kind: "web",
-    description: "React SPA served via CDN; entry point for all merchant dashboards.",
-    responsibilities: ["Render dashboards", "OAuth login flows", "Client-side routing"],
-    dependencies: ["API Gateway"],
-    connected: ["gw"],
-    database: "—",
-    endpoints: [{ method: "GET", path: "/" }, { method: "GET", path: "/dashboard" }],
-    complexity: "Medium",
-    latency: "60ms p95",
-    security: ["CSP strict-dynamic", "SRI on chunks"],
-    cache: "CDN edge cache, 30s stale-while-revalidate",
-    suggestions: ["Preload critical fonts", "Ship route-level code splits"],
-  },
-  gw: {
-    id: "gw",
-    name: "API Gateway",
-    kind: "gateway",
-    description: "Terminates TLS, authenticates requests, and routes to downstream services.",
-    responsibilities: ["JWT validation", "Rate limiting", "Request tracing"],
-    dependencies: ["Auth Service", "User Service", "Notification Service"],
-    connected: ["auth", "user", "notif"],
-    database: "—",
-    endpoints: [
-      { method: "POST", path: "/v1/auth" },
-      { method: "GET", path: "/v1/users/:id" },
-      { method: "POST", path: "/v1/notify" },
-    ],
-    complexity: "High",
-    latency: "12ms p95",
-    security: ["mTLS to services", "OWASP rules on WAF"],
-    cache: "None (auth-sensitive)",
-    suggestions: ["Add global 429 backoff hint", "Emit RED metrics per route"],
-  },
-  auth: {
-    id: "auth",
-    name: "Auth Service",
-    kind: "service",
-    description: "Issues short-lived JWTs, rotates refresh tokens, and enforces MFA.",
-    responsibilities: ["Login / logout", "Refresh rotation", "MFA challenges"],
-    dependencies: ["Redis"],
-    connected: ["redis", "gw"],
-    database: "Redis (session store)",
-    endpoints: [
-      { method: "POST", path: "/login" },
-      { method: "POST", path: "/refresh" },
-      { method: "POST", path: "/logout" },
-    ],
-    complexity: "High",
-    latency: "38ms p95",
-    security: ["PKCE required", "Rate limit /login 10/min/IP"],
-    cache: "Refresh tokens in Redis with 5m TTL",
-    suggestions: ["Enforce refresh-token rotation", "Add step-up auth for admin scopes"],
-  },
-  user: {
-    id: "user",
-    name: "User Service",
-    kind: "service",
-    description: "Canonical profile store; publishes user.updated events downstream.",
-    responsibilities: ["Profile CRUD", "Tenant membership", "Role assignment"],
-    dependencies: ["MongoDB", "RabbitMQ"],
-    connected: ["mongo", "mq", "gw"],
-    database: "MongoDB (users, tenants)",
-    endpoints: [
-      { method: "GET", path: "/v1/users/:id" },
-      { method: "POST", path: "/v1/users" },
-      { method: "PATCH", path: "/v1/users/:id" },
-    ],
-    complexity: "Medium",
-    latency: "48ms p95",
-    security: ["Field-level encryption on PII"],
-    cache: "60s LRU on hot profiles",
-    suggestions: ["Add read replica for reporting", "Denormalize tenant lookups"],
-  },
-  notif: {
-    id: "notif",
-    name: "Notification Service",
-    kind: "service",
-    description: "Fan-out delivery over email, SMS, and push via queue-backed workers.",
-    responsibilities: ["Templating", "Delivery routing", "Bounce handling"],
-    dependencies: ["RabbitMQ", "Object Storage"],
-    connected: ["mq", "s3", "gw"],
-    database: "S3 (rendered assets)",
-    endpoints: [
-      { method: "POST", path: "/v1/notify" },
-      { method: "GET", path: "/v1/deliveries/:id" },
-    ],
-    complexity: "High",
-    latency: "120ms p95",
-    security: ["Signed webhook callbacks"],
-    cache: "Compiled templates in-process",
-    suggestions: ["Split fan-out to worker pool", "Retry with jittered backoff"],
-  },
-  redis: {
-    id: "redis",
-    name: "Redis",
-    kind: "cache",
-    description: "Session store and rate-limit counters. Redis 7 with 3-node cluster.",
-    responsibilities: ["Session store", "Rate limit counters", "Ephemeral cache"],
-    dependencies: [],
-    connected: ["auth"],
-    database: "In-memory",
-    endpoints: [],
-    complexity: "Low",
-    latency: "0.6ms p95",
-    security: ["ACL per service", "TLS in transit"],
-    cache: "—",
-    suggestions: ["Enable RDB snapshots hourly"],
-  },
-  mq: {
-    id: "mq",
-    name: "RabbitMQ",
-    kind: "queue",
-    description: "Durable message broker for async fan-out between services.",
-    responsibilities: ["Queue durability", "Fan-out exchanges", "DLQ handling"],
-    dependencies: [],
-    connected: ["user", "notif"],
-    database: "—",
-    endpoints: [],
-    complexity: "Medium",
-    latency: "3ms p95",
-    security: ["vhost isolation per tenant"],
-    cache: "—",
-    suggestions: ["Add quorum queues for reliability"],
-  },
-  mongo: {
-    id: "mongo",
-    name: "MongoDB",
-    kind: "db",
-    description: "Document store for user, tenant, and configuration data.",
-    responsibilities: ["Persist users, tenants", "Secondary indexes"],
-    dependencies: [],
-    connected: ["user"],
-    database: "MongoDB 7",
-    endpoints: [],
-    complexity: "Medium",
-    latency: "9ms p95",
-    security: ["Encryption at rest", "IAM auth"],
-    cache: "WiredTiger cache 8 GB",
-    suggestions: ["Add TTL indexes for sessions"],
-  },
-  s3: {
-    id: "s3",
-    name: "Object Storage",
-    kind: "storage",
-    description: "Rendered notification assets and export bundles.",
-    responsibilities: ["Blob storage", "Lifecycle rules"],
-    dependencies: [],
-    connected: ["notif"],
-    database: "S3",
-    endpoints: [],
-    complexity: "Low",
-    latency: "24ms p95",
-    security: ["Bucket policy: private, signed URLs"],
-    cache: "—",
-    suggestions: ["Move cold exports to Glacier after 30d"],
-  },
-};
+function buildDynamicInspectorData(
+  selectedId: string | null,
+  nodes: CanvasNodeData[],
+  edges: CanvasEdgeData[]
+): DynamicInspector | null {
+  if (!selectedId) return null;
+  const node = nodes.find((n) => n.id === selectedId);
+  if (!node) return null;
+
+  const outgoing = edges.filter((e) => e.from === node.id).map((e) => e.to);
+  const incoming = edges.filter((e) => e.to === node.id).map((e) => e.from);
+  const connectedKeys = Array.from(new Set([...outgoing, ...incoming]));
+  const connectedLabels = connectedKeys.map((k) => nodes.find((n) => n.id === k)?.label || k);
+
+  const isAuth = node.kind === "auth";
+  const isGateway = node.kind === "gateway" || node.kind === "api";
+  const isDb = node.kind === "database";
+  const isCache = node.kind === "cache";
+  const isQueue = node.kind === "queue";
+  const isStorage = node.kind === "storage";
+  const isFrontend = node.kind === "frontend" || node.kind === "web";
+  const isVector = node.id.includes("vector") || node.id.includes("embedding");
+
+  const totalConnections = outgoing.length + incoming.length;
+  const complexity = totalConnections > 3 ? "High" : totalConnections > 1 ? "Medium" : "Low";
+
+  const responsibilities: string[] = [];
+  if (node.description) responsibilities.push(node.description);
+  if (isFrontend) responsibilities.push("Render user interface components", "Client route navigation", "API interaction");
+  else if (isGateway) responsibilities.push("API request routing & TLS termination", "Rate limiting protection", "Ingress validation boundary");
+  else if (isAuth) responsibilities.push("User identity authentication", "JWT token generation", "Role-based authorization");
+  else if (isVector) responsibilities.push("Vector embedding calculation", "Dense similarity index", "kNN vector queries");
+  else if (isDb) responsibilities.push("Relational entity storage", "ACID transactional consistency", "Index maintenance");
+  else if (isCache) responsibilities.push("In-memory cache retrieval", "Session key storage", "Rate limit counters");
+  else if (isQueue) responsibilities.push("Asynchronous event queue", "Message distribution", "Worker task dispatch");
+  else if (isStorage) responsibilities.push("Asset and document storage", "Presigned upload URLs", "Blob lifecycle");
+  else responsibilities.push("Domain business logic execution", "Service-to-service communication", "Entity mutations");
+
+  const security: string[] = [];
+  if (isAuth) security.push("Argon2 / bcrypt password hashing", "Short-lived JWT tokens", "RBAC policy enforcement");
+  else if (isGateway) security.push("OWASP WAF rules", "Rate limiting per client IP", "Strict TLS in transit");
+  else if (isDb) security.push("Encryption at rest (AES-256)", "Least privilege database roles", "Parameterized queries");
+  else if (isFrontend) security.push("Content Security Policy (CSP)", "XSS protection", "HttpOnly session cookies");
+  else if (isStorage) security.push("Bucket policies: private by default", "Time-limited presigned URLs");
+  else security.push("Internal network boundary", "Service-to-service token validation");
+
+  const suggestions: string[] = [];
+  if (isDb) suggestions.push("Configure connection pooling (PgBouncer)", "Schedule automated nightly backups");
+  else if (isVector) suggestions.push("Tune HNSW indexing parameters (m, ef_construction)", "Batch embedding requests");
+  else if (isGateway) suggestions.push("Add global 429 backoff headers", "Export Prometheus RED latency metrics");
+  else if (isAuth) suggestions.push("Enforce MFA / 2FA for administrative roles", "Add token refresh rotation");
+  else if (isCache) suggestions.push("Set eviction policy to volatile-lru", "Monitor memory fragmentation");
+  else if (isQueue) suggestions.push("Configure Dead Letter Queue (DLQ) for failed messages", "Monitor consumer group lag");
+  else suggestions.push("Implement health check endpoints (/health, /ready)", "Add structured OpenTelemetry tracing");
+
+  const endpoints = isGateway
+    ? [
+        { method: "POST", path: "/api/v1/auth" },
+        { method: "GET", path: "/api/v1/projects" },
+        { method: "POST", path: "/api/v1/projects" },
+      ]
+    : isAuth
+      ? [
+          { method: "POST", path: "/auth/login" },
+          { method: "POST", path: "/auth/register" },
+          { method: "POST", path: "/auth/refresh" },
+        ]
+      : isFrontend
+        ? [
+            { method: "GET", path: "/" },
+            { method: "GET", path: "/dashboard" },
+          ]
+        : [
+            { method: "GET", path: "/api/health" },
+            { method: "GET", path: "/api/entities" },
+          ];
+
+  return {
+    id: node.id,
+    name: node.label,
+    kind: node.kind,
+    description: node.description || `${node.label} component derived from project requirements`,
+    responsibilities: responsibilities.slice(0, 3),
+    dependencies: incoming.map((id) => nodes.find((n) => n.id === id)?.label || id),
+    connected: connectedLabels,
+    database: isDb ? "PostgreSQL / Dedicated" : nodes.find((n) => n.kind === "database")?.label || "None",
+    endpoints: isDb || isCache || isQueue || isStorage ? [] : endpoints,
+    complexity,
+    latency: isDb ? "4ms p95" : isCache ? "1ms p95" : isFrontend ? "45ms p95" : "12ms p95",
+    security,
+    cache: isCache ? "Redis" : nodes.find((n) => n.kind === "cache")?.label || "None",
+    suggestions,
+  };
+}
 
 function RightPane({
   tab,
   onTab,
   selected,
+  canvasNodes,
+  canvasEdges,
   onClose,
 }: {
   tab: "inspector" | "ai";
   onTab: (t: "inspector" | "ai") => void;
   selected: string | null;
+  canvasNodes: CanvasNodeData[];
+  canvasEdges: CanvasEdgeData[];
   onClose: () => void;
 }) {
+  const inspectorData = buildDynamicInspectorData(selected, canvasNodes, canvasEdges);
+
   return (
     <div className="h-full flex flex-col bg-panel/40">
       <div className="h-9 shrink-0 border-b border-border flex items-center px-1">
@@ -726,7 +1585,7 @@ function RightPane({
               : "border-transparent text-muted-foreground hover:text-foreground")
           }
         >
-          AI ({RECS.length})
+          Insights
         </button>
         {tab === "inspector" && selected && (
           <button
@@ -739,15 +1598,62 @@ function RightPane({
         )}
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {tab === "ai" && <AIRecommendationsList />}
-        {tab === "inspector" && (selected ? <InspectorView data={INSPECTOR[selected]} /> : <InspectorEmpty />)}
+        {tab === "ai" && <ArchitectureInsights nodes={canvasNodes} />}
+        {tab === "inspector" && (inspectorData ? <InspectorView data={inspectorData} /> : <InspectorEmpty />)}
       </div>
     </div>
   );
 }
 
-function AIRecommendationsList() {
-  return <AIRecommendations />;
+function ArchitectureInsights({ nodes }: { nodes: CanvasNodeData[] }) {
+  const hasDb = nodes.some((n) => n.kind === "database");
+  const hasCache = nodes.some((n) => n.kind === "cache");
+  const hasAuth = nodes.some((n) => n.kind === "auth");
+  const hasQueue = nodes.some((n) => n.kind === "queue");
+  const hasVector = nodes.some((n) => n.id.includes("vector") || n.id.includes("embedding"));
+
+  const insights = [
+    {
+      title: "Security & Perimeter",
+      body: hasAuth
+        ? "Dedicated authentication service isolates user session verification from downstream domain logic."
+        : "No dedicated authentication service detected. System relies on external or gateway identity handling.",
+    },
+    {
+      title: "Data Persistence",
+      body: hasVector
+        ? "Hybrid storage topology: Vector index handles high-dimensional similarity while relational stores maintain domain records."
+        : hasDb
+          ? "Relational database tier provides ACID transactions for core business state."
+          : "No persistent database node detected. Add persistence requirements if required.",
+    },
+    {
+      title: "Performance & Caching",
+      body: hasCache
+        ? "In-memory cache store offloads hot reads from the database tier."
+        : "Direct data access detected. Consider Redis caching if low latency reads are required.",
+    },
+    {
+      title: "Asynchronous Workloads",
+      body: hasQueue
+        ? "Message queue decouples heavy processing from user-facing request cycles."
+        : "Workloads are currently synchronous. Consider background queueing for long tasks.",
+    },
+  ];
+
+  return (
+    <div className="p-3 space-y-2 text-xs">
+      <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+        Architecture Analysis ({nodes.length} components)
+      </div>
+      {insights.map((item, i) => (
+        <div key={i} className="rounded border border-border bg-background p-2.5 space-y-1">
+          <div className="font-semibold text-foreground text-xs">{item.title}</div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">{item.body}</p>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function InspectorEmpty() {
@@ -758,21 +1664,21 @@ function InspectorEmpty() {
           <Layers className="h-4 w-4 text-muted-foreground" />
         </div>
         <div className="text-xs text-muted-foreground">
-          Select a service on the canvas to inspect its responsibilities, endpoints, and AI suggestions.
+          Select a component on the canvas to inspect its responsibilities, dependencies, and network connections.
         </div>
       </div>
     </div>
   );
 }
 
-function InspectorView({ data }: { data: Inspector | undefined }) {
-  if (!data) return <InspectorEmpty />;
+function InspectorView({ data }: { data: DynamicInspector }) {
   const cxTone =
     data.complexity === "High"
       ? "text-destructive"
       : data.complexity === "Medium"
         ? "text-warning"
         : "text-success";
+
   return (
     <div className="p-3 space-y-3 text-xs">
       <div className="space-y-1">
@@ -800,7 +1706,7 @@ function InspectorView({ data }: { data: Inspector | undefined }) {
       </InspectorSection>
 
       {data.dependencies.length > 0 && (
-        <InspectorSection title="Dependencies">
+        <InspectorSection title="Incoming Dependencies">
           <div className="flex flex-wrap gap-1.5">
             {data.dependencies.map((d) => (
               <span key={d} className="h-6 px-2 rounded border border-border bg-surface text-[11px] font-mono flex items-center">
@@ -812,28 +1718,24 @@ function InspectorView({ data }: { data: Inspector | undefined }) {
       )}
 
       {data.connected.length > 0 && (
-        <InspectorSection title="Connected services">
+        <InspectorSection title="Connected Services">
           <div className="space-y-1">
-            {data.connected.map((id) => {
-              const target = INSPECTOR[id];
-              if (!target) return null;
-              return (
-                <div key={id} className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground">
-                  <ArrowRight className="h-3 w-3" />
-                  <span>{target.name}</span>
-                </div>
-              );
-            })}
+            {data.connected.map((name) => (
+              <div key={name} className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground">
+                <ArrowRight className="h-3 w-3" />
+                <span>{name}</span>
+              </div>
+            ))}
           </div>
         </InspectorSection>
       )}
 
-      <InspectorSection title="Database">
+      <InspectorSection title="Data Layer">
         <span className="font-mono text-[11px]">{data.database}</span>
       </InspectorSection>
 
       {data.endpoints.length > 0 && (
-        <InspectorSection title={`API endpoints (${data.endpoints.length})`}>
+        <InspectorSection title={`API Endpoints (${data.endpoints.length})`}>
           <div className="rounded border border-border overflow-hidden divide-y divide-border">
             {data.endpoints.map((e) => (
               <div key={e.method + e.path} className="flex items-center gap-2 h-7 px-2 bg-background">
@@ -858,7 +1760,7 @@ function InspectorView({ data }: { data: Inspector | undefined }) {
         </InspectorSection>
       )}
 
-      <InspectorSection title="Caching strategy">
+      <InspectorSection title="Caching Strategy">
         <p className="text-[11px] text-muted-foreground">{data.cache}</p>
       </InspectorSection>
 
@@ -873,7 +1775,7 @@ function InspectorView({ data }: { data: Inspector | undefined }) {
         </ul>
       </InspectorSection>
 
-      <InspectorSection title="AI suggestions" icon={Sparkles}>
+      <InspectorSection title="Recommendations" icon={Sparkles}>
         <div className="space-y-1.5">
           {data.suggestions.map((s) => (
             <div key={s} className="rounded border border-border bg-background p-2 text-[11px]">
@@ -926,64 +1828,78 @@ function InspectorSection({
   );
 }
 
-/* ---------- console ---------- */
+/* ---------- real generation console ---------- */
 
-const LOGS: { tone: "ok" | "warn" | "err"; text: string; time: string }[] = [
-  { tone: "ok", text: "Parsing Requirements", time: "12:04:22" },
-  { tone: "ok", text: "Detecting Entities (37)", time: "12:04:23" },
-  { tone: "ok", text: "Designing Database schema", time: "12:04:25" },
-  { tone: "ok", text: "Creating APIs (126 endpoints)", time: "12:04:28" },
-  { tone: "ok", text: "Generating Architecture (14 services)", time: "12:04:31" },
-  { tone: "warn", text: "Notification Service exceeds recommended fan-out (12 > 8)", time: "12:04:33" },
-  { tone: "ok", text: "Building Folder Structure", time: "12:04:34" },
-  { tone: "ok", text: "Writing Documentation (128 modules)", time: "12:04:41" },
-  { tone: "ok", text: "Completed Successfully — score 92", time: "12:04:44" },
-];
-
-function GenerationConsole() {
+function GenerationConsole({
+  logs,
+  isGenerating,
+  onClear,
+}: {
+  logs: ConsoleLogItem[];
+  isGenerating: boolean;
+  onClear: () => void;
+}) {
   return (
     <div className="h-full flex flex-col bg-background">
       <PanelHeader
         label="console"
-        badge="live"
+        badge={isGenerating ? "running" : logs.length > 0 ? "live" : "ready"}
         actions={
           <>
-            <span className="text-[11px] font-mono text-muted-foreground pr-2">9 events · 1 warning</span>
-            <IconGhost title="Clear"><XCircle className="h-3.5 w-3.5" /></IconGhost>
+            <span className="text-[11px] font-mono text-muted-foreground pr-2">
+              {logs.length} event{logs.length === 1 ? "" : "s"}
+            </span>
+            <IconGhost title="Clear console" onClick={onClear}>
+              <XCircle className="h-3.5 w-3.5" />
+            </IconGhost>
           </>
         }
       />
       <div className="flex-1 min-h-0 overflow-y-auto p-3 font-mono text-[12px] leading-relaxed space-y-0.5">
-        {LOGS.map((l, i) => {
-          const Icon = l.tone === "ok" ? CheckCircle2 : l.tone === "warn" ? TriangleAlert : XCircle;
-          const cls = l.tone === "ok" ? "text-success" : l.tone === "warn" ? "text-warning" : "text-destructive";
-          return (
-            <div key={i} className="flex items-start gap-2">
-              <span className="text-muted-foreground w-20 shrink-0">{l.time}</span>
-              <Icon className={"h-3.5 w-3.5 mt-0.5 shrink-0 " + cls} />
-              <span>{l.text}</span>
+        {logs.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-center p-4">
+            <div className="text-xs text-muted-foreground font-mono space-y-1">
+              <p>System ready. Add requirements and click "Generate Architecture" to run the pipeline.</p>
             </div>
-          );
-        })}
+          </div>
+        ) : (
+          logs.map((l, i) => {
+            const Icon = l.tone === "ok" ? CheckCircle2 : l.tone === "warn" ? TriangleAlert : XCircle;
+            const cls = l.tone === "ok" ? "text-success" : l.tone === "warn" ? "text-warning" : "text-destructive";
+            return (
+              <div key={i} className="flex items-start gap-2">
+                <span className="text-muted-foreground w-20 shrink-0">{l.time}</span>
+                <Icon className={"h-3.5 w-3.5 mt-0.5 shrink-0 " + cls} />
+                <span>{l.text}</span>
+              </div>
+            );
+          })
+        )}
         <div className="flex items-center gap-2 pt-2 text-muted-foreground">
           <span className="text-primary">archforge</span>
           <span>$</span>
-          <span className="h-3 w-1.5 bg-primary animate-pulse" />
+          {isGenerating ? (
+            <span className="text-xs text-primary animate-pulse">generating architecture...</span>
+          ) : (
+            <span className="h-3 w-1.5 bg-primary animate-pulse" />
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-/* ---------- shared ---------- */
+/* ---------- shared helpers ---------- */
 
 function PanelHeader({
   label,
   badge,
+  badgeClass,
   actions,
 }: {
   label: string;
   badge?: string;
+  badgeClass?: string;
   actions?: React.ReactNode;
 }) {
   return (
@@ -993,7 +1909,12 @@ function PanelHeader({
         {label}
       </span>
       {badge && (
-        <span className="h-5 px-1.5 rounded border border-border bg-surface text-[10px] font-mono text-muted-foreground">
+        <span
+          className={
+            "h-5 px-1.5 rounded border text-[10px] font-mono flex items-center " +
+            (badgeClass ?? "border-border bg-surface text-muted-foreground")
+          }
+        >
           {badge}
         </span>
       )}

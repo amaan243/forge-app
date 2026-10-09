@@ -1,68 +1,179 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { Share2, Shield, ShieldAlert, ArrowRight, ExternalLink } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  Share2,
+  ShieldAlert,
+  ArrowRight,
+  Loader2,
+  AlertTriangle,
+  FolderOpen,
+  Filter,
+  RefreshCw,
+  Info,
+  Package,
+} from "lucide-react";
+import { useWorkspace } from "@/lib/workspace-context";
+import {
+  getDependencies,
+  type DependencyNode,
+  type DependencyEdge,
+  type DependencyGraphResponse,
+} from "@/api/repository";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_app/dependencies")({
   head: () => ({
     meta: [
       { title: "Dependency Visualizer — ArchForge" },
-      { name: "description", content: "Interactive graph of services, databases, caches, queues, and external APIs with security context." },
+      { name: "description", content: "Interactive graph of services, dependencies, and imports." },
     ],
   }),
   component: DepsPage,
 });
 
-type Node = {
-  id: string;
-  label: string;
-  kind: "frontend" | "backend" | "service" | "database" | "cache" | "queue" | "external";
+type VisualNode = DependencyNode & {
   x: number;
   y: number;
-  version: string;
-  risk: "low" | "med" | "high";
+  kind: "frontend" | "backend" | "service" | "database" | "cache" | "package" | "external";
 };
 
-const NODES: Node[] = [
-  { id: "web", label: "Web App", kind: "frontend", x: 100, y: 90, version: "2.14.0", risk: "low" },
-  { id: "mobile", label: "Mobile", kind: "frontend", x: 100, y: 260, version: "1.9.2", risk: "low" },
-  { id: "gw", label: "Gateway", kind: "backend", x: 320, y: 175, version: "3.1.0", risk: "low" },
-  { id: "auth", label: "AuthService", kind: "service", x: 540, y: 70, version: "1.4.0", risk: "med" },
-  { id: "orders", label: "OrdersService", kind: "service", x: 540, y: 180, version: "2.7.1", risk: "low" },
-  { id: "notif", label: "Notifications", kind: "service", x: 540, y: 300, version: "1.1.3", risk: "high" },
-  { id: "pg", label: "Postgres", kind: "database", x: 780, y: 120, version: "15.4", risk: "low" },
-  { id: "redis", label: "Redis", kind: "cache", x: 780, y: 220, version: "7.2", risk: "low" },
-  { id: "kafka", label: "Kafka", kind: "queue", x: 780, y: 320, version: "3.6", risk: "med" },
-  { id: "stripe", label: "Stripe", kind: "external", x: 1000, y: 170, version: "2024-11", risk: "low" },
-  { id: "sendgrid", label: "SendGrid", kind: "external", x: 1000, y: 300, version: "v3", risk: "med" },
-];
-
-const EDGES: [string, string][] = [
-  ["web", "gw"], ["mobile", "gw"],
-  ["gw", "auth"], ["gw", "orders"], ["gw", "notif"],
-  ["auth", "pg"], ["auth", "redis"],
-  ["orders", "pg"], ["orders", "redis"], ["orders", "kafka"], ["orders", "stripe"],
-  ["notif", "kafka"], ["notif", "sendgrid"],
-];
-
-const KIND_COLORS: Record<Node["kind"], string> = {
+const KIND_COLORS: Record<VisualNode["kind"], string> = {
   frontend: "text-info",
   backend: "text-primary",
   service: "text-primary",
   database: "text-success",
   cache: "text-warning",
-  queue: "text-warning",
+  package: "text-muted-foreground",
   external: "text-muted-foreground",
 };
 
-function DepsPage() {
-  const [selectedId, setSelectedId] = useState<string>("orders");
-  const selected = NODES.find((n) => n.id === selectedId)!;
-  const dependencies = EDGES.filter(([a]) => a === selectedId).map(([, b]) => NODES.find(n => n.id === b)!);
-  const dependents = EDGES.filter(([, b]) => b === selectedId).map(([a]) => NODES.find(n => n.id === a)!);
+function inferKind(node: DependencyNode): VisualNode["kind"] {
+  const name = node.name.toLowerCase();
+  if (name.includes("react") || name.includes("vue") || name.includes("client") || name.includes("app")) return "frontend";
+  if (name.includes("postgres") || name.includes("mysql") || name.includes("mongo") || name.includes("prisma")) return "database";
+  if (name.includes("redis") || name.includes("cache")) return "cache";
+  if (node.ecosystem === "internal") return "service";
+  if (name.includes("express") || name.includes("fastify") || name.includes("server") || name.includes("api")) return "backend";
+  return "package";
+}
 
-  return (
-    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] min-h-[calc(100vh-3rem)]">
-      <div className="p-6 lg:p-8 space-y-4 border-r border-border min-w-0">
+function DepsPage() {
+  const { currentProject } = useWorkspace();
+  const [data, setData] = useState<DependencyGraphResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filterEcosystem, setFilterEcosystem] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
+
+  const fetchData = useCallback(async () => {
+    if (!currentProject) return;
+    setLoading(true);
+    try {
+      const graphData = await getDependencies(currentProject.id);
+      setData(graphData);
+      if (graphData.nodes.length > 0 && !selectedId) {
+        setSelectedId(graphData.nodes[0].id);
+      }
+    } catch {
+      // Global error handler
+    } finally {
+      setLoading(false);
+    }
+  }, [currentProject, selectedId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Compute visual layout for nodes
+  const visualNodes: VisualNode[] = useMemo(() => {
+    if (!data || !data.nodes.length) return [];
+
+    let filtered = data.nodes;
+    if (filterEcosystem !== "all") {
+      filtered = filtered.filter((n) => n.ecosystem === filterEcosystem);
+    }
+    if (filterType !== "all") {
+      filtered = filtered.filter((n) => n.type === filterType);
+    }
+
+    // Sort nodes into columns based on depth and kind
+    const columns: Record<number, DependencyNode[]> = { 0: [], 1: [], 2: [], 3: [] };
+    filtered.forEach((n) => {
+      const col = Math.min(3, Math.max(0, n.depth || 0));
+      columns[col].push(n);
+    });
+
+    const result: VisualNode[] = [];
+    Object.entries(columns).forEach(([colStr, colNodes]) => {
+      const col = parseInt(colStr, 10);
+      colNodes.forEach((n, row) => {
+        result.push({
+          ...n,
+          kind: inferKind(n),
+          x: 40 + col * 260,
+          y: 40 + row * 64,
+        });
+      });
+    });
+
+    return result;
+  }, [data, filterEcosystem, filterType]);
+
+  const activeNodeIds = useMemo(() => new Set(visualNodes.map((n) => n.id)), [visualNodes]);
+
+  const visualEdges = useMemo(() => {
+    if (!data) return [];
+    return data.edges.filter((e) => activeNodeIds.has(e.source) && activeNodeIds.has(e.target));
+  }, [data, activeNodeIds]);
+
+  const selected = useMemo(() => {
+    return visualNodes.find((n) => n.id === selectedId) || visualNodes[0] || null;
+  }, [visualNodes, selectedId]);
+
+  const downstreamDeps = useMemo(() => {
+    if (!selected || !data) return [];
+    const targets = new Set(data.edges.filter((e) => e.source === selected.id).map((e) => e.target));
+    return visualNodes.filter((n) => targets.has(n.id));
+  }, [selected, data, visualNodes]);
+
+  const upstreamConsumers = useMemo(() => {
+    if (!selected || !data) return [];
+    const sources = new Set(data.edges.filter((e) => e.target === selected.id).map((e) => e.source));
+    return visualNodes.filter((n) => sources.has(n.id));
+  }, [selected, data, visualNodes]);
+
+  const svgHeight = useMemo(() => {
+    const maxY = visualNodes.reduce((max, n) => Math.max(max, n.y), 400);
+    return Math.max(480, maxY + 100);
+  }, [visualNodes]);
+
+  if (!currentProject) {
+    return (
+      <div className="p-6 lg:p-8 space-y-4">
+        <h1 className="text-2xl font-display font-semibold tracking-tight">Dependency Visualizer</h1>
+        <div className="surface-panel p-8 text-center space-y-3">
+          <FolderOpen className="h-8 w-8 text-muted-foreground mx-auto" />
+          <h2 className="text-lg font-medium">No Project Selected</h2>
+          <p className="text-sm text-muted-foreground">Select an active workspace project to inspect dependencies.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && !data) {
+    return (
+      <div className="p-6 lg:p-8 space-y-6">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading dependency graph...
+        </div>
+      </div>
+    );
+  }
+
+  if (!data || data.nodes.length === 0) {
+    return (
+      <div className="p-6 lg:p-8 space-y-6">
         <header className="space-y-2">
           <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
             <Share2 className="h-3.5 w-3.5" /> Dependency visualizer
@@ -70,8 +181,73 @@ function DepsPage() {
           <h1 className="text-2xl font-display font-semibold tracking-tight">Service topology</h1>
         </header>
 
+        <div className="surface-panel p-8 text-center space-y-4 max-w-xl mx-auto">
+          <Package className="h-10 w-10 text-muted-foreground mx-auto" />
+          <div className="space-y-1">
+            <h2 className="text-lg font-medium">No dependencies analyzed yet</h2>
+            <p className="text-sm text-muted-foreground">
+              Connect and analyze your repository on the Repository page to generate a live dependency graph.
+            </p>
+          </div>
+          <Button asChild>
+            <Link to="/repository">Go to Repository Page</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] min-h-[calc(100vh-3rem)]">
+      <div className="p-6 lg:p-8 space-y-4 border-r border-border min-w-0">
+        <header className="flex items-end justify-between gap-4 flex-wrap">
+          <div className="space-y-1">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <Share2 className="h-3.5 w-3.5" /> Dependency visualizer
+            </div>
+            <h1 className="text-2xl font-display font-semibold tracking-tight">Dependency topology</h1>
+            <p className="text-xs text-muted-foreground">
+              {visualNodes.length} components · {visualEdges.length} connections detected from repository manifests and imports.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={filterEcosystem}
+              onChange={(e) => setFilterEcosystem(e.target.value)}
+              className="h-8 rounded border border-input bg-background px-2 text-xs font-mono"
+            >
+              <option value="all">All Ecosystems</option>
+              <option value="npm">npm</option>
+              <option value="pip">Python / pip</option>
+              <option value="maven">Maven</option>
+              <option value="internal">Internal Modules</option>
+            </select>
+
+            <Button variant="outline" size="sm" onClick={fetchData} title="Refresh dependency graph">
+              <RefreshCw className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </header>
+
+        {/* Circular Candidates Alert */}
+        {data.circularCandidates && data.circularCandidates.length > 0 && (
+          <div className="p-3 rounded border border-warning/30 bg-warning/5 text-xs text-warning flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-semibold">Potential circular dependency detected:</span>
+              <div className="font-mono text-[11px]">
+                {data.circularCandidates.map((c, i) => (
+                  <div key={i}>{c.join(" ➔ ")}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Graph Canvas */}
         <div className="surface-panel p-4 overflow-auto">
-          <svg viewBox="0 0 1120 400" className="w-full h-[440px] font-mono">
+          <svg viewBox={`0 0 1100 ${svgHeight}`} className="w-full font-mono" style={{ minHeight: "450px" }}>
             <defs>
               <pattern id="grid-deps" width="24" height="24" patternUnits="userSpaceOnUse">
                 <path d="M 24 0 L 0 0 0 24" fill="none" stroke="currentColor" className="text-border" strokeWidth="0.5" />
@@ -80,16 +256,22 @@ function DepsPage() {
                 <path d="M0,0 L10,5 L0,10 z" className="fill-primary" />
               </marker>
             </defs>
-            <rect width="1120" height="400" fill="url(#grid-deps)" />
-            {EDGES.map(([a, b], i) => {
-              const na = NODES.find((n) => n.id === a)!;
-              const nb = NODES.find((n) => n.id === b)!;
-              const active = a === selectedId || b === selectedId;
+            <rect width="1100" height={svgHeight} fill="url(#grid-deps)" />
+
+            {/* Edges */}
+            {visualEdges.map((e, i) => {
+              const na = visualNodes.find((n) => n.id === e.source);
+              const nb = visualNodes.find((n) => n.id === e.target);
+              if (!na || !nb) return null;
+              const active = selected && (e.source === selected.id || e.target === selected.id);
+
               return (
                 <line
                   key={i}
-                  x1={na.x + 60} y1={na.y + 20}
-                  x2={nb.x} y2={nb.y + 20}
+                  x1={na.x + 130}
+                  y1={na.y + 22}
+                  x2={nb.x}
+                  y2={nb.y + 22}
                   className={active ? "stroke-primary" : "stroke-border"}
                   strokeWidth={active ? 1.5 : 1}
                   strokeDasharray="4 3"
@@ -101,90 +283,116 @@ function DepsPage() {
                 </line>
               );
             })}
-            {NODES.map((n) => (
-              <g
-                key={n.id}
-                transform={`translate(${n.x}, ${n.y})`}
-                onClick={() => setSelectedId(n.id)}
-                className="cursor-pointer"
-              >
-                <rect width="120" height="44" rx="4"
-                  className={
-                    (n.id === selectedId ? "fill-primary/15 stroke-primary" : "fill-panel stroke-border") +
-                    " hover:stroke-primary/60"
-                  }
-                  strokeWidth="1" />
-                <circle cx="10" cy="14" r="3" className={"fill-current " + KIND_COLORS[n.kind]} />
-                <text x="20" y="18" className="fill-foreground" fontSize="11" fontWeight="600">{n.label}</text>
-                <text x="10" y="34" className="fill-muted-foreground" fontSize="9">{n.kind} · {n.version}</text>
-              </g>
-            ))}
+
+            {/* Nodes */}
+            {visualNodes.map((n) => {
+              const isSelected = selected?.id === n.id;
+              return (
+                <g
+                  key={n.id}
+                  transform={`translate(${n.x}, ${n.y})`}
+                  onClick={() => setSelectedId(n.id)}
+                  className="cursor-pointer"
+                >
+                  <rect
+                    width="140"
+                    height="44"
+                    rx="4"
+                    className={
+                      (isSelected ? "fill-primary/15 stroke-primary" : "fill-panel stroke-border") +
+                      " hover:stroke-primary/60 transition-colors"
+                    }
+                    strokeWidth="1"
+                  />
+                  <circle cx="12" cy="14" r="3" className={"fill-current " + KIND_COLORS[n.kind]} />
+                  <text x="22" y="18" className="fill-foreground text-[11px] font-semibold truncate max-w-[110px]">
+                    {n.name.length > 14 ? n.name.slice(0, 13) + "…" : n.name}
+                  </text>
+                  <text x="12" y="34" className="fill-muted-foreground text-[9px]">
+                    {n.ecosystem} · {n.version}
+                  </text>
+                  {n.isUnused && (
+                    <circle cx="128" cy="12" r="3" className="fill-warning" title="Unused dependency candidate" />
+                  )}
+                </g>
+              );
+            })}
           </svg>
         </div>
 
+        {/* Categories Bar */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px] font-mono">
-          {(Object.keys(KIND_COLORS) as Node["kind"][]).map((k) => (
+          {(["frontend", "backend", "service", "database", "cache", "package"] as VisualNode["kind"][]).map((k) => (
             <div key={k} className="flex items-center gap-2 surface-panel px-3 py-2">
               <span className={"h-1.5 w-1.5 rounded-full bg-current " + KIND_COLORS[k]} />
               <span className="capitalize">{k}</span>
-              <span className="ml-auto text-muted-foreground">{NODES.filter(n => n.kind === k).length}</span>
+              <span className="ml-auto text-muted-foreground">
+                {visualNodes.filter((n) => n.kind === k).length}
+              </span>
             </div>
           ))}
         </div>
       </div>
 
+      {/* Detail Aside */}
       <aside className="p-4 bg-panel/50 space-y-4">
-        <div>
-          <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Inspecting</div>
-          <div className="text-xl font-display font-semibold mt-1">{selected.label}</div>
-          <div className="text-[11px] font-mono text-muted-foreground">
-            {selected.kind} · v{selected.version}
-          </div>
-        </div>
+        {selected ? (
+          <>
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Inspecting Component</div>
+              <div className="text-xl font-display font-semibold mt-1 break-all">{selected.name}</div>
+              <div className="text-[11px] font-mono text-muted-foreground">
+                {selected.ecosystem} · v{selected.version} {selected.type ? `(${selected.type})` : ""}
+              </div>
+            </div>
 
-        <div className="surface-panel p-3 space-y-2">
-          <div className="flex items-center justify-between text-[11px] font-mono">
-            <span className="text-muted-foreground">Risk level</span>
-            <RiskPill risk={selected.risk} />
-          </div>
-          <div className="flex items-center justify-between text-[11px] font-mono">
-            <span className="text-muted-foreground">Documentation</span>
-            <span className="text-success flex items-center gap-1"><Shield className="h-3 w-3" /> up-to-date</span>
-          </div>
-          <div className="flex items-center justify-between text-[11px] font-mono">
-            <span className="text-muted-foreground">Open CVEs</span>
-            <span className={selected.risk === "high" ? "text-destructive" : selected.risk === "med" ? "text-warning" : "text-success"}>
-              {selected.risk === "high" ? 3 : selected.risk === "med" ? 1 : 0}
-            </span>
-          </div>
-        </div>
+            <div className="surface-panel p-3 space-y-2 text-[11px] font-mono">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Ecosystem</span>
+                <span>{selected.ecosystem}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Fan-in (consumers)</span>
+                <span>{selected.fanIn}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Fan-out (dependencies)</span>
+                <span>{selected.fanOut}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Graph Depth</span>
+                <span>{selected.depth}</span>
+              </div>
+              {selected.isUnused && (
+                <div className="flex items-center justify-between text-warning">
+                  <span>Usage status</span>
+                  <span>Unused candidate</span>
+                </div>
+              )}
+            </div>
 
-        <DepList title="Depends on" nodes={dependencies} empty="No downstream dependencies" />
-        <DepList title="Depended on by" nodes={dependents} empty="No upstream consumers" />
+            {/* Vulnerability notice without fake CVEs */}
+            <div className="surface-panel p-3 space-y-2 text-[11px]">
+              <div className="flex items-center gap-2 text-muted-foreground font-mono uppercase text-[10px]">
+                <ShieldAlert className="h-3.5 w-3.5" /> Vulnerability Status
+              </div>
+              <p className="text-muted-foreground leading-relaxed">
+                Vulnerability scanning not configured. Connect GitHub Dependabot or Snyk for verified security advisories.
+              </p>
+            </div>
 
-        <a className="text-[11px] font-mono text-primary hover:underline inline-flex items-center gap-1">
-          Open service documentation <ExternalLink className="h-3 w-3" />
-        </a>
+            <DepList title="Depends on" nodes={downstreamDeps} empty="No downstream dependencies" />
+            <DepList title="Depended on by" nodes={upstreamConsumers} empty="No upstream consumers" />
+          </>
+        ) : (
+          <div className="p-4 text-center text-xs text-muted-foreground">Select a node in the graph to inspect details.</div>
+        )}
       </aside>
     </div>
   );
 }
 
-function RiskPill({ risk }: { risk: "low" | "med" | "high" }) {
-  const map = {
-    low: "bg-success/10 text-success border-success/30",
-    med: "bg-warning/10 text-warning border-warning/30",
-    high: "bg-destructive/10 text-destructive border-destructive/30",
-  } as const;
-  return (
-    <span className={"inline-flex items-center gap-1 h-5 px-2 rounded border text-[10px] uppercase " + map[risk]}>
-      <ShieldAlert className="h-3 w-3" />
-      {risk}
-    </span>
-  );
-}
-
-function DepList({ title, nodes, empty }: { title: string; nodes: Node[]; empty: string }) {
+function DepList({ title, nodes, empty }: { title: string; nodes: VisualNode[]; empty: string }) {
   return (
     <div>
       <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">{title}</div>
@@ -195,9 +403,9 @@ function DepList({ title, nodes, empty }: { title: string; nodes: Node[]; empty:
           nodes.map((n) => (
             <div key={n.id} className="p-2.5 flex items-center gap-2">
               <span className={"h-1.5 w-1.5 rounded-full bg-current " + KIND_COLORS[n.kind]} />
-              <span className="text-xs font-medium">{n.label}</span>
-              <span className="ml-auto font-mono text-[10px] text-muted-foreground">v{n.version}</span>
-              <ArrowRight className="h-3 w-3 text-muted-foreground" />
+              <span className="text-xs font-medium truncate flex-1">{n.name}</span>
+              <span className="font-mono text-[10px] text-muted-foreground">{n.version}</span>
+              <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
             </div>
           ))
         )}

@@ -7,6 +7,7 @@ import { snapshotController } from "../controllers/snapshot-controller.js";
 import { timelineController } from "../controllers/timeline-controller.js";
 export const architectureRoutes = Router({ mergeParams: true });
 architectureRoutes.use(requireAuth);
+architectureRoutes.post("/generate", requireProjectEditor, architectureController.generate);
 architectureRoutes.get("/", requireProjectMember, architectureController.current);
 architectureRoutes.get("/compare", requireProjectMember, architectureController.compare);
 architectureRoutes.get("/timeline", requireProjectMember, timelineController);
