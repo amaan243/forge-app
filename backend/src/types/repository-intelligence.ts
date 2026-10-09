@@ -228,10 +228,24 @@ export interface DriftSeverityCounts {
   low: number;
 }
 
+export interface DriftScoreBreakdown {
+  expectedComponents: number;
+  matchedComponents: number;
+  componentCoverageScore: number;
+  missingComponentsPenalty: number;
+  technologyMismatchPenalty: number;
+  integrationMismatchPenalty: number;
+  extraModulesPenalty: number;
+  totalPenalties: number;
+  finalScore: number;
+  explanation: string;
+}
+
 export interface DriftCounts {
   total: number;
   byCategory: DriftCategoryCounts;
   bySeverity: DriftSeverityCounts;
+  scoreBreakdown?: DriftScoreBreakdown;
 }
 
 export interface DriftFindingMetadata {
