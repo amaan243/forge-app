@@ -144,11 +144,11 @@ export function ProjectSwitcher({ variant = "header", className = "" }: ProjectS
   };
 
   return (
-    <div className="relative inline-block text-left" ref={dropdownRef}>
+    <div className={`relative inline-block text-left ${open ? "z-50" : ""}`} ref={dropdownRef}>
       {renderTrigger()}
 
       {open && (
-        <div className="absolute left-0 mt-1 w-72 surface-panel shadow-2xl z-50 overflow-hidden divide-y divide-border border border-border rounded-md animate-in fade-in-50 zoom-in-95 duration-100">
+        <div className={`absolute ${variant === "toolbar" ? "right-0" : "left-0"} mt-1 w-72 surface-panel shadow-2xl z-50 overflow-hidden divide-y divide-border border border-border rounded-md animate-in fade-in-50 zoom-in-95 duration-100`}>
           {/* Header Info */}
           <div className="px-3 py-2 bg-panel/50">
             <div className="flex items-center justify-between">

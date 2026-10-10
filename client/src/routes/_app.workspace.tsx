@@ -551,8 +551,8 @@ function ProjectTimeline({
   const currentIdx = currentVersionNumber || isPreview ? 1 : 0;
 
   return (
-    <div className="h-11 border-b border-border bg-panel/60 flex items-center justify-between gap-2 px-4 overflow-x-auto">
-      <div className="flex items-center gap-2">
+    <div className="h-11 border-b border-border bg-panel/60 flex items-center justify-between gap-2 px-4 relative z-20">
+      <div className="flex items-center gap-2 overflow-x-auto min-w-0">
         <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0">
           Pipeline
         </span>

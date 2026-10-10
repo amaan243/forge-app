@@ -209,7 +209,7 @@ function AppShell() {
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        <header className="h-12 border-b border-border bg-panel/95 backdrop-blur-sm flex items-center gap-3 px-4 shrink-0">
+        <header className="relative z-50 h-12 border-b border-border bg-panel/95 backdrop-blur-sm flex items-center gap-3 px-4 shrink-0">
           <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground">
             <span>archforge</span>
             {currentWorkspace && (
