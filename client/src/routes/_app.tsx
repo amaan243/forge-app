@@ -39,6 +39,7 @@ import { GeometricAvatar } from "@/components/geometric-avatar";
 import { getHealth } from "@/api/health";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
+import { ProjectSwitcher } from "@/components/project-switcher";
 
 export const Route = createFileRoute("/_app")({
   component: AppShell,
@@ -215,6 +216,8 @@ function AppShell() {
               <>
                 <ChevronRight className="h-3 w-3" />
                 <span className="text-foreground">{currentWorkspace.name}</span>
+                <ChevronRight className="h-3 w-3" />
+                <ProjectSwitcher variant="header" />
               </>
             )}
             {crumbs.map((c, i) => (

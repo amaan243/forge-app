@@ -3,6 +3,7 @@ import { History, GitCompare, Copy, RotateCcw, Trash2, Eye, Loader2, Plus, Alert
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useCallback } from "react";
 import { useWorkspace } from "@/lib/workspace-context";
+import { ProjectSwitcher } from "@/components/project-switcher";
 import {
   getArchitectureVersions,
   deleteArchitectureVersion,
@@ -30,6 +31,35 @@ function VersionsPage() {
   const [loading, setLoading] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
 
+  useEffect(() => {
+    setVersions([]);
+    if (!currentProject) {
+      setLoading(false);
+      return;
+    }
+
+    let isCurrent = true;
+    setLoading(true);
+
+    const loadVersions = async () => {
+      try {
+        const data = await getArchitectureVersions(currentProject.id);
+        if (!isCurrent) return;
+        setVersions(data);
+      } catch {
+        // handled
+      } finally {
+        if (isCurrent) setLoading(false);
+      }
+    };
+
+    loadVersions();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [currentProject?.id]);
+
   const fetchVersions = useCallback(async () => {
     if (!currentProject) return;
     setLoading(true);
@@ -42,10 +72,6 @@ function VersionsPage() {
       setLoading(false);
     }
   }, [currentProject]);
-
-  useEffect(() => {
-    fetchVersions();
-  }, [fetchVersions]);
 
   const handleDuplicate = async (v: ArchitectureVersion) => {
     if (!currentProject) return;
@@ -120,11 +146,11 @@ function VersionsPage() {
           <p className="text-sm text-muted-foreground">
             Every version is immutable. Restore or duplicate creates a new version — the original is preserved.
           </p>
-          <p className="text-xs font-mono text-muted-foreground">
-            Project: <span className="text-foreground">{currentProject.name}</span>
-          </p>
+          <div className="pt-1">
+            <ProjectSwitcher variant="inline" />
+          </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <Button variant="outline" asChild><Link to="/compare"><GitCompare /> Compare two versions</Link></Button>
           <Button asChild><Link to="/workspace"><Plus /> New Version</Link></Button>
         </div>

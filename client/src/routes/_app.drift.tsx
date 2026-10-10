@@ -26,6 +26,7 @@ import {
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/lib/workspace-context";
+import { ProjectSwitcher } from "@/components/project-switcher";
 import {
   getArchitectureVersions,
   type ArchitectureVersion,
@@ -41,6 +42,7 @@ import {
   type DriftScoreBreakdown,
   type RepositoryStatusResponse,
   type RepositoryAnalysis,
+  type RepositoryRecord,
 } from "@/api/repository";
 import { toast } from "sonner";
 
@@ -59,7 +61,9 @@ function DriftPage() {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
 
-  // Versions and Snapshots
+  // Repositories, Versions and Snapshots
+  const [repositories, setRepositories] = useState<RepositoryRecord[]>([]);
+  const [selectedRepoId, setSelectedRepoId] = useState<string>("");
   const [versions, setVersions] = useState<ArchitectureVersion[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string>("");
   const [repoStatus, setRepoStatus] = useState<RepositoryStatusResponse | null>(null);
@@ -77,51 +81,160 @@ function DriftPage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
+  // Project change reset & stale request cancellation
+  useEffect(() => {
+    // 1. Immediately wipe all state for previous project
+    setVersions([]);
+    setSelectedVersionId("");
+    setRepositories([]);
+    setSelectedRepoId("");
+    setRepoStatus(null);
+    setSnapshots([]);
+    setSelectedSnapshotId("");
+    setDriftHistory([]);
+    setSelectedDriftId("");
+    setActiveDrift(null);
+
+    if (!currentProject) {
+      setLoading(false);
+      return;
+    }
+
+    let isCurrent = true;
+    setLoading(true);
+
+    const loadInitial = async () => {
+      try {
+        const [vers, status] = await Promise.all([
+          getArchitectureVersions(currentProject.id),
+          getRepositoryStatus(currentProject.id),
+        ]);
+
+        if (!isCurrent) return;
+
+        setVersions(vers);
+        const firstVersionId = vers.length > 0 ? vers[0].id : "";
+        setSelectedVersionId(firstVersionId);
+
+        setRepoStatus(status);
+        const activeRepos = (status.repositories || []).filter((r) => r.status !== "disconnected");
+        setRepositories(activeRepos);
+
+        const primaryRepoId = status.repository?.id || activeRepos[0]?.id || "";
+        setSelectedRepoId(primaryRepoId);
+
+        if (primaryRepoId) {
+          const [analysesList, drifts] = await Promise.all([
+            getRepositoryAnalyses(currentProject.id, primaryRepoId),
+            getDriftAnalyses(currentProject.id, primaryRepoId),
+          ]);
+
+          if (!isCurrent) return;
+
+          const completedList = analysesList.filter((a) => a.status === "completed");
+          setSnapshots(completedList);
+          setSelectedSnapshotId(completedList.length > 0 ? completedList[0].id : "");
+
+          setDriftHistory(drifts);
+          if (drifts.length > 0) {
+            setSelectedDriftId(drifts[0].id);
+            const full = await getDriftAnalysis(currentProject.id, drifts[0].id);
+            if (!isCurrent) return;
+            setActiveDrift(full);
+          } else {
+            setActiveDrift(null);
+            setSelectedDriftId("");
+          }
+        } else {
+          setSnapshots([]);
+          setSelectedSnapshotId("");
+          setDriftHistory([]);
+          setSelectedDriftId("");
+          setActiveDrift(null);
+        }
+      } catch {
+        // Handled by global interceptor
+      } finally {
+        if (isCurrent) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadInitial();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [currentProject?.id]);
+
+  // Handle architecture version change
+  const handleSelectVersion = (versionId: string) => {
+    setSelectedVersionId(versionId);
+    if (activeDrift && activeDrift.architecture_version_id !== versionId) {
+      setActiveDrift(null);
+    }
+  };
+
+  const handleRefresh = async () => {
     if (!currentProject) return;
     setLoading(true);
     try {
-      // 1. Architecture versions
-      const vers = await getArchitectureVersions(currentProject.id);
+      const [vers, status] = await Promise.all([
+        getArchitectureVersions(currentProject.id),
+        getRepositoryStatus(currentProject.id),
+      ]);
       setVersions(vers);
-      if (vers.length > 0 && !selectedVersionId) {
-        setSelectedVersionId(vers[0].id);
-      }
-
-      // 2. Repository status & Snapshots
-      const status = await getRepositoryStatus(currentProject.id);
       setRepoStatus(status);
-
-      const analysesList = await getRepositoryAnalyses(currentProject.id);
-      const completedList = analysesList.filter((a) => a.status === "completed");
-      setSnapshots(completedList);
-      if (completedList.length > 0 && !selectedSnapshotId) {
-        setSelectedSnapshotId(completedList[0].id);
-      } else if (status.latestAnalysis?.status === "completed" && !selectedSnapshotId) {
-        setSelectedSnapshotId(status.latestAnalysis.id);
-      }
-
-      // 3. Drift analyses history
-      const drifts = await getDriftAnalyses(currentProject.id);
-      setDriftHistory(drifts);
-      if (drifts.length > 0) {
-        const targetId = selectedDriftId || drifts[0].id;
-        setSelectedDriftId(targetId);
-        const full = await getDriftAnalysis(currentProject.id, targetId);
-        setActiveDrift(full);
-      } else {
-        setActiveDrift(null);
+      const activeRepos = (status.repositories || []).filter((r) => r.status !== "disconnected");
+      setRepositories(activeRepos);
+      const targetRepoId = selectedRepoId || status.repository?.id || activeRepos[0]?.id || "";
+      if (targetRepoId) {
+        const [analysesList, drifts] = await Promise.all([
+          getRepositoryAnalyses(currentProject.id, targetRepoId),
+          getDriftAnalyses(currentProject.id, targetRepoId),
+        ]);
+        const completedList = analysesList.filter((a) => a.status === "completed");
+        setSnapshots(completedList);
+        setDriftHistory(drifts);
       }
     } catch {
-      // Handled by global client interceptor
+      // Handled
     } finally {
       setLoading(false);
     }
-  }, [currentProject, selectedVersionId, selectedSnapshotId, selectedDriftId]);
+  };
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // Handle repository change
+  const handleSelectRepository = async (repoId: string) => {
+    if (!currentProject) return;
+    setSelectedRepoId(repoId);
+    setSelectedSnapshotId("");
+    setActiveDrift(null);
+    setLoading(true);
+    try {
+      const analysesList = await getRepositoryAnalyses(currentProject.id, repoId);
+      const completedList = analysesList.filter((a) => a.status === "completed");
+      setSnapshots(completedList);
+      const nextSnapshotId = completedList.length > 0 ? completedList[0].id : "";
+      setSelectedSnapshotId(nextSnapshotId);
+
+      const drifts = await getDriftAnalyses(currentProject.id, repoId);
+      setDriftHistory(drifts);
+      if (drifts.length > 0) {
+        setSelectedDriftId(drifts[0].id);
+        const full = await getDriftAnalysis(currentProject.id, drifts[0].id);
+        setActiveDrift(full);
+      } else {
+        setSelectedDriftId("");
+        setActiveDrift(null);
+      }
+    } catch {
+      toast.error("Failed to load snapshots for selected repository");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Load selected historical drift analysis
   const handleSelectHistory = async (driftId: string) => {
@@ -131,7 +244,12 @@ function DriftPage() {
     try {
       const full = await getDriftAnalysis(currentProject.id, driftId);
       setActiveDrift(full);
-      // Synchronize version and snapshot selectors to match historical run
+      if (full.repository_id) {
+        setSelectedRepoId(full.repository_id);
+        const analysesList = await getRepositoryAnalyses(currentProject.id, full.repository_id);
+        const completedList = analysesList.filter((a) => a.status === "completed");
+        setSnapshots(completedList);
+      }
       if (full.architecture_version_id) setSelectedVersionId(full.architecture_version_id);
       if (full.repository_analysis_id) setSelectedSnapshotId(full.repository_analysis_id);
     } catch {
@@ -143,7 +261,7 @@ function DriftPage() {
 
   const handleRunDrift = async () => {
     if (!currentProject) return;
-    const effectiveSnapshotId = selectedSnapshotId || snapshots[0]?.id || repoStatus?.latestAnalysis?.id;
+    const effectiveSnapshotId = selectedSnapshotId || snapshots[0]?.id;
     if (!effectiveSnapshotId) {
       toast.error("Completed repository analysis snapshot required before running drift detection");
       return;
@@ -158,6 +276,7 @@ function DriftPage() {
     try {
       const result = await runDriftAnalysis(currentProject.id, {
         architecture_version_id: effectiveVersionId,
+        repository_id: selectedRepoId || undefined,
         repository_analysis_id: effectiveSnapshotId,
       });
       setActiveDrift(result);
@@ -171,13 +290,17 @@ function DriftPage() {
     }
   };
 
+  const selectedRepository = useMemo(() => {
+    return repositories.find((r) => r.id === selectedRepoId) || repoStatus?.repository || null;
+  }, [repositories, selectedRepoId, repoStatus]);
+
   const selectedVersion = useMemo(() => {
     return versions.find((v) => v.id === selectedVersionId) || versions[0] || null;
   }, [versions, selectedVersionId]);
 
   const selectedSnapshot = useMemo(() => {
-    return snapshots.find((s) => s.id === selectedSnapshotId) || snapshots[0] || repoStatus?.latestAnalysis || null;
-  }, [snapshots, selectedSnapshotId, repoStatus]);
+    return snapshots.find((s) => s.id === selectedSnapshotId) || snapshots[0] || null;
+  }, [snapshots, selectedSnapshotId]);
 
   const items = useMemo(() => {
     return activeDrift?.drift_items || activeDrift?.items || [];
@@ -254,6 +377,9 @@ function DriftPage() {
           <FolderOpen className="h-8 w-8 text-muted-foreground mx-auto" />
           <h2 className="text-lg font-medium">No Project Selected</h2>
           <p className="text-sm text-muted-foreground">Select an active workspace project to detect architecture drift.</p>
+          <div className="pt-2 flex justify-center">
+            <ProjectSwitcher variant="inline" />
+          </div>
         </div>
       </div>
     );
@@ -289,19 +415,22 @@ function DriftPage() {
             </span>{" "}
             from{" "}
             <span className="font-mono text-foreground">
-              {repoStatus?.repository ? `${repoStatus.repository.owner}/${repoStatus.repository.repository_name}` : "unconnected"}
+              {selectedRepository ? `${selectedRepository.owner}/${selectedRepository.repository_name}` : "unconnected"}
             </span>.
           </p>
         </div>
 
-        {/* Action Controls & Selectors */}
+        {/* Action Controls & Selectors Hierarchy */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Project Selector */}
+          <ProjectSwitcher variant="inline" />
+
           {/* Architecture Version Selector */}
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-mono uppercase text-muted-foreground">Version:</span>
             <select
               value={selectedVersionId}
-              onChange={(e) => setSelectedVersionId(e.target.value)}
+              onChange={(e) => handleSelectVersion(e.target.value)}
               className="h-8 rounded border border-input bg-background px-2 text-xs font-mono"
             >
               {versions.length > 0 ? (
@@ -312,6 +441,26 @@ function DriftPage() {
                 ))
               ) : (
                 <option value="">No versions</option>
+              )}
+            </select>
+          </div>
+
+          {/* Repository Selector */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-mono uppercase text-muted-foreground">Repo:</span>
+            <select
+              value={selectedRepoId}
+              onChange={(e) => handleSelectRepository(e.target.value)}
+              className="h-8 rounded border border-input bg-background px-2 text-xs font-mono font-medium"
+            >
+              {repositories.length > 0 ? (
+                repositories.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.owner}/{r.repository_name}
+                  </option>
+                ))
+              ) : (
+                <option value="">No repositories</option>
               )}
             </select>
           </div>
@@ -355,7 +504,7 @@ function DriftPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchData}
+            onClick={handleRefresh}
             title="Refresh analysis data"
           >
             <RefreshCw className="h-3.5 w-3.5" />
@@ -561,7 +710,7 @@ function DriftPage() {
                 <CheckCircle2 className="h-8 w-8 text-primary mx-auto" />
                 <h3 className="text-base font-semibold">No drift findings detected in the inspected scope</h3>
                 <p className="text-xs text-muted-foreground max-w-lg mx-auto">
-                  All {selectedVersion?.nodes?.length ?? 0} architecture components and declared technologies were verified against detected repository modules, dependencies, and frameworks.
+                  All {((selectedVersion as any)?.nodes?.length ?? (selectedVersion?.architecture_data?.nodes as any[])?.length) ?? 0} architecture components and declared technologies were verified against detected repository modules, dependencies, and frameworks.
                 </p>
                 <div className="text-[11px] font-mono text-muted-foreground/80 bg-surface/50 p-2.5 rounded max-w-md mx-auto">
                   Inspected static scope: {selectedSnapshot?.analysis_data?.filesAnalyzed ?? 0} files. Note: Static analysis verifies code structure and dependencies, not dynamic runtime behavior.

@@ -28,6 +28,7 @@ import {
   Boxes,
   LayoutGrid,
   Move,
+  FolderGit2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +37,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { useWorkspace } from "@/lib/workspace-context";
+import { ProjectSwitcher } from "@/components/project-switcher";
 import {
   getRequirements,
   createRequirement,
@@ -216,10 +218,88 @@ function WorkspacePage() {
 
   // Initial load when currentProject changes
   useEffect(() => {
-    fetchRequirements();
-    fetchArchitecture();
+    // 1. Immediately wipe previous project state to avoid cross-project data leakage
+    setRequirements([]);
+    setCurrentVersion(null);
+    setCanvasNodes([]);
+    setCanvasEdges([]);
+    setPreviewArchitecture(null);
+    setSelected(null);
+    setSelectedEdge(null);
     setConsoleLogs([]);
-  }, [fetchRequirements, fetchArchitecture]);
+
+    if (!currentProject) {
+      setReqsLoading(false);
+      setArchLoading(false);
+      return;
+    }
+
+    let isCurrent = true;
+    setReqsLoading(true);
+    setArchLoading(true);
+
+    const loadData = async () => {
+      try {
+        const [reqs, graph] = await Promise.all([
+          getRequirements(currentProject.id),
+          getArchitecture(currentProject.id),
+        ]);
+
+        if (!isCurrent) return; // Stale response guard
+
+        setRequirements(reqs);
+
+        if (graph.version) {
+          setCurrentVersion(graph.version);
+          setPreviewArchitecture(null);
+          if (graph.nodes.length > 0) {
+            const mappedNodes = graph.nodes.map(archNodeToCanvas);
+            setCanvasNodes(mappedNodes);
+            setSelected(mappedNodes[0]?.id ?? null);
+          } else {
+            setCanvasNodes([]);
+            setSelected(null);
+          }
+
+          if (graph.edges.length > 0) {
+            const nodeKeyMap = new Map(graph.nodes.map((n) => [n.id, n.node_key]));
+            setCanvasEdges(
+              graph.edges
+                .map((e) => ({
+                  from: nodeKeyMap.get(e.source_node_id) ?? "",
+                  to: nodeKeyMap.get(e.target_node_id) ?? "",
+                  relationship: e.relationship,
+                  protocol: e.protocol ?? undefined,
+                  description: e.description ?? undefined,
+                }))
+                .filter((e) => e.from && e.to)
+            );
+          } else {
+            setCanvasEdges([]);
+          }
+        } else {
+          setCurrentVersion(null);
+          setPreviewArchitecture(null);
+          setCanvasNodes([]);
+          setCanvasEdges([]);
+          setSelected(null);
+        }
+      } catch {
+        // Handled by global interceptor
+      } finally {
+        if (isCurrent) {
+          setReqsLoading(false);
+          setArchLoading(false);
+        }
+      }
+    };
+
+    loadData();
+
+    return () => {
+      isCurrent = false; // Prevents stale response overwrite
+    };
+  }, [currentProject?.id]);
 
   // Generate architecture preview
   const handleGenerateArchitecture = async () => {
@@ -350,6 +430,30 @@ function WorkspacePage() {
     addLog("Discarded temporary preview", "warn");
     toast.info("Preview discarded");
   };
+
+  if (!currentProject) {
+    return (
+      <div className="h-[calc(100vh-3rem)] flex flex-col">
+        <ProjectTimeline />
+        <div className="flex-1 flex items-center justify-center p-8 bg-background">
+          <div className="max-w-md w-full surface-panel p-8 text-center space-y-4 border border-border rounded-lg shadow-lg">
+            <div className="h-12 w-12 rounded-full bg-surface border border-border flex items-center justify-center mx-auto text-primary">
+              <FolderGit2 className="h-6 w-6" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-base font-display font-semibold text-foreground">No Project Selected</h2>
+              <p className="text-xs text-muted-foreground">
+                Select an existing project in your workspace or create a new project to author requirements and generate architecture.
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <ProjectSwitcher variant="inline" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[calc(100vh-3rem)] flex flex-col">
@@ -486,9 +590,7 @@ function ProjectTimeline({
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <span className="text-xs font-mono text-muted-foreground">
-          Project: <strong className="text-foreground">{currentProject ? currentProject.name : "Unassigned"}</strong>
-        </span>
+        <ProjectSwitcher variant="toolbar" />
         {currentVersionNumber && (
           <span className="h-5 px-1.5 rounded text-[10px] font-mono border border-success/40 bg-success/10 text-success">
             v{currentVersionNumber}

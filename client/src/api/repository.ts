@@ -11,6 +11,7 @@ export interface RepositoryRecord {
   access_type: "public" | "private";
   external_repository_id: string;
   credential_reference?: string;
+  status?: "active" | "disconnected";
   connected_by?: string;
   created_at: string;
   updated_at: string;
@@ -176,6 +177,15 @@ export interface ConnectRepositoryInput {
 
 export interface RepositoryStatusResponse {
   repository: RepositoryRecord | null;
+  repositories?: RepositoryRecord[];
+  latestAnalysis: RepositoryAnalysis | null;
+  latestAttempt?: RepositoryAnalysis | null;
+  latestSuccessful?: RepositoryAnalysis | null;
+  activeAnalysis: RepositoryAnalysis | null;
+}
+
+export interface RepositorySummaryItem {
+  repository: RepositoryRecord;
   latestAnalysis: RepositoryAnalysis | null;
   latestAttempt?: RepositoryAnalysis | null;
   latestSuccessful?: RepositoryAnalysis | null;
@@ -305,13 +315,25 @@ export interface DriftAnalysis {
 
 export interface RunDriftInput {
   architecture_version_id?: string;
+  repository_id?: string;
   repository_analysis_id?: string;
 }
 
 // 1. Repository Connection & Status
-export async function getRepositoryStatus(projectId: string): Promise<RepositoryStatusResponse> {
+export async function getRepositories(projectId: string): Promise<RepositorySummaryItem[]> {
+  const response = await apiClient.get<{ success: boolean; data: RepositorySummaryItem[] }>(
+    `/api/v1/projects/${projectId}/repositories`
+  );
+  return response.data.data;
+}
+
+export async function getRepositoryStatus(
+  projectId: string,
+  repositoryId?: string
+): Promise<RepositoryStatusResponse> {
   const response = await apiClient.get<{ success: boolean; data: RepositoryStatusResponse }>(
-    `/api/v1/projects/${projectId}/repository`
+    `/api/v1/projects/${projectId}/repository`,
+    { params: repositoryId ? { repositoryId } : undefined }
   );
   return response.data.data;
 }
@@ -327,31 +349,50 @@ export async function connectRepository(
   return response.data.data;
 }
 
-export async function disconnectRepository(projectId: string): Promise<void> {
-  await apiClient.delete(`/api/v1/projects/${projectId}/repository`);
+export async function disconnectRepository(
+  projectId: string,
+  repositoryId?: string
+): Promise<void> {
+  if (repositoryId) {
+    await apiClient.delete(`/api/v1/projects/${projectId}/repositories/${repositoryId}`);
+  } else {
+    await apiClient.delete(`/api/v1/projects/${projectId}/repository`);
+  }
 }
 
 export async function triggerRepositoryAnalysis(
   projectId: string,
-  branch?: string
+  branch?: string,
+  repositoryId?: string
 ): Promise<RepositoryAnalysis> {
   const response = await apiClient.post<{ success: boolean; data: RepositoryAnalysis }>(
     `/api/v1/projects/${projectId}/repository/analyze`,
-    branch ? { branch } : {}
+    {
+      ...(branch ? { branch } : {}),
+      ...(repositoryId ? { repository_id: repositoryId } : {}),
+    }
   );
   return response.data.data;
 }
 
-export async function getRepositoryAnalyses(projectId: string): Promise<RepositoryAnalysis[]> {
+export async function getRepositoryAnalyses(
+  projectId: string,
+  repositoryId?: string
+): Promise<RepositoryAnalysis[]> {
   const response = await apiClient.get<{ success: boolean; data: RepositoryAnalysis[] }>(
-    `/api/v1/projects/${projectId}/repository/analyses`
+    `/api/v1/projects/${projectId}/repository/analyses`,
+    { params: repositoryId ? { repositoryId } : undefined }
   );
   return response.data.data;
 }
 
-export async function getLatestAnalysis(projectId: string): Promise<RepositoryAnalysis | null> {
+export async function getLatestAnalysis(
+  projectId: string,
+  repositoryId?: string
+): Promise<RepositoryAnalysis | null> {
   const response = await apiClient.get<{ success: boolean; data: RepositoryAnalysis | null }>(
-    `/api/v1/projects/${projectId}/repository/analysis/latest`
+    `/api/v1/projects/${projectId}/repository/analysis/latest`,
+    { params: repositoryId ? { repositoryId } : undefined }
   );
   return response.data.data;
 }
@@ -359,7 +400,7 @@ export async function getLatestAnalysis(projectId: string): Promise<RepositoryAn
 // 2. Dependencies
 export async function getDependencies(
   projectId: string,
-  filters?: { type?: string; risk?: string; ecosystem?: string }
+  filters?: { repositoryId?: string; type?: string; risk?: string; ecosystem?: string }
 ): Promise<DependencyGraphResponse> {
   const response = await apiClient.get<{ success: boolean; data: DependencyGraphResponse }>(
     `/api/v1/projects/${projectId}/dependencies`,
@@ -380,9 +421,13 @@ export async function runDriftAnalysis(
   return response.data.data;
 }
 
-export async function getDriftAnalyses(projectId: string): Promise<DriftAnalysis[]> {
+export async function getDriftAnalyses(
+  projectId: string,
+  repositoryId?: string
+): Promise<DriftAnalysis[]> {
   const response = await apiClient.get<{ success: boolean; data: DriftAnalysis[] }>(
-    `/api/v1/projects/${projectId}/drift`
+    `/api/v1/projects/${projectId}/drift`,
+    { params: repositoryId ? { repositoryId } : undefined }
   );
   return response.data.data;
 }

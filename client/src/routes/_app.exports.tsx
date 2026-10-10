@@ -35,13 +35,22 @@ const HISTORY = [
   { name: "starter-repo.zip", size: "—", when: "queued", status: "queued" },
 ];
 
+import { useWorkspace } from "@/lib/workspace-context";
+import { ProjectSwitcher } from "@/components/project-switcher";
+
 function ExportsPage() {
+  const { currentProject } = useWorkspace();
   return (
     <div className="p-6 lg:p-8 space-y-6">
-      <header className="space-y-2">
-        <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">payments-platform · v0.3.0</div>
-        <h1 className="text-2xl font-display font-semibold tracking-tight">Export Center</h1>
-        <p className="text-sm text-muted-foreground">Ship your architecture in the format your team needs.</p>
+      <header className="flex items-end justify-between gap-4 flex-wrap">
+        <div className="space-y-2">
+          <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+            Project: {currentProject ? currentProject.name : "Select Project"}
+          </div>
+          <h1 className="text-2xl font-display font-semibold tracking-tight">Export Center</h1>
+          <p className="text-sm text-muted-foreground">Ship your architecture in the format your team needs.</p>
+        </div>
+        <ProjectSwitcher variant="inline" />
       </header>
 
       {(["Diagram", "Docs", "Data", "Code"] as const).map((cat) => (

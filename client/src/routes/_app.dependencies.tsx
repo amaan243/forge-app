@@ -13,6 +13,7 @@ import {
   Package,
 } from "lucide-react";
 import { useWorkspace } from "@/lib/workspace-context";
+import { ProjectSwitcher } from "@/components/project-switcher";
 import {
   getDependencies,
   type DependencyNode,
@@ -31,7 +32,7 @@ export const Route = createFileRoute("/_app/dependencies")({
   component: DepsPage,
 });
 
-type VisualNode = DependencyNode & {
+type VisualNode = Omit<DependencyNode, "kind"> & {
   x: number;
   y: number;
   kind: "frontend" | "backend" | "service" | "database" | "cache" | "package" | "external";
@@ -65,6 +66,40 @@ function DepsPage() {
   const [filterEcosystem, setFilterEcosystem] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
 
+  useEffect(() => {
+    setData(null);
+    setSelectedId(null);
+
+    if (!currentProject) {
+      setLoading(false);
+      return;
+    }
+
+    let isCurrent = true;
+    setLoading(true);
+
+    const loadData = async () => {
+      try {
+        const graphData = await getDependencies(currentProject.id);
+        if (!isCurrent) return;
+        setData(graphData);
+        if (graphData.nodes.length > 0) {
+          setSelectedId(graphData.nodes[0].id);
+        }
+      } catch {
+        // Global error handler
+      } finally {
+        if (isCurrent) setLoading(false);
+      }
+    };
+
+    loadData();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [currentProject?.id]);
+
   const fetchData = useCallback(async () => {
     if (!currentProject) return;
     setLoading(true);
@@ -80,10 +115,6 @@ function DepsPage() {
       setLoading(false);
     }
   }, [currentProject, selectedId]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
 
   // Compute visual layout for nodes
   const visualNodes: VisualNode[] = useMemo(() => {
@@ -156,6 +187,9 @@ function DepsPage() {
           <FolderOpen className="h-8 w-8 text-muted-foreground mx-auto" />
           <h2 className="text-lg font-medium">No Project Selected</h2>
           <p className="text-sm text-muted-foreground">Select an active workspace project to inspect dependencies.</p>
+          <div className="pt-2 flex justify-center">
+            <ProjectSwitcher variant="inline" />
+          </div>
         </div>
       </div>
     );
@@ -174,11 +208,14 @@ function DepsPage() {
   if (!data || data.nodes.length === 0) {
     return (
       <div className="p-6 lg:p-8 space-y-6">
-        <header className="space-y-2">
-          <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <Share2 className="h-3.5 w-3.5" /> Dependency visualizer
+        <header className="flex items-end justify-between gap-4 flex-wrap">
+          <div className="space-y-1">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <Share2 className="h-3.5 w-3.5" /> Dependency visualizer
+            </div>
+            <h1 className="text-2xl font-display font-semibold tracking-tight">Service topology</h1>
           </div>
-          <h1 className="text-2xl font-display font-semibold tracking-tight">Service topology</h1>
+          <ProjectSwitcher variant="inline" />
         </header>
 
         <div className="surface-panel p-8 text-center space-y-4 max-w-xl mx-auto">
@@ -212,6 +249,7 @@ function DepsPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <ProjectSwitcher variant="inline" />
             <select
               value={filterEcosystem}
               onChange={(e) => setFilterEcosystem(e.target.value)}
@@ -312,7 +350,9 @@ function DepsPage() {
                     {n.ecosystem} · {n.version}
                   </text>
                   {n.isUnused && (
-                    <circle cx="128" cy="12" r="3" className="fill-warning" title="Unused dependency candidate" />
+                    <circle cx="128" cy="12" r="3" className="fill-warning">
+                      <title>Unused dependency candidate</title>
+                    </circle>
                   )}
                 </g>
               );

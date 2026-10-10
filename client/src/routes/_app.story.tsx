@@ -12,7 +12,11 @@ export const Route = createFileRoute("/_app/story")({
   component: StoryPage,
 });
 
+import { useWorkspace } from "@/lib/workspace-context";
+import { ProjectSwitcher } from "@/components/project-switcher";
+
 function StoryPage() {
+  const { currentProject } = useWorkspace();
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
       <header className="flex items-end justify-between gap-4 flex-wrap">
@@ -20,15 +24,18 @@ function StoryPage() {
           <div className="text-[11px] font-mono uppercase tracking-wider text-primary flex items-center gap-2">
             <BookOpen className="h-3.5 w-3.5" /> Project story mode
           </div>
-          <h1 className="text-3xl font-display font-semibold tracking-tight">ERP Platform — Engineering Story</h1>
+          <h1 className="text-3xl font-display font-semibold tracking-tight">
+            {currentProject ? currentProject.name : "Engineering Story"}
+          </h1>
           <p className="text-sm text-muted-foreground">
             Generated for demos and placement interviews. Regenerate any section on demand.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline"><Download /> Export PDF</Button>
-          <Button variant="outline"><Presentation /> Present</Button>
-          <Button><Sparkles /> Regenerate</Button>
+        <div className="flex gap-2 items-center flex-wrap">
+          <ProjectSwitcher variant="inline" />
+          <Button variant="outline"><Download className="h-3.5 w-3.5 mr-1" /> Export PDF</Button>
+          <Button variant="outline"><Presentation className="h-3.5 w-3.5 mr-1" /> Present</Button>
+          <Button><Sparkles className="h-3.5 w-3.5 mr-1" /> Regenerate</Button>
         </div>
       </header>
 

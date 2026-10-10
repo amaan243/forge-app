@@ -29,7 +29,11 @@ const AVAILABLE: { label: string; kind: ChangeOp["kind"]; hint: string }[] = [
   { label: "Rate limiter", kind: "service", hint: "Front /auth and /orders" },
 ];
 
+import { useWorkspace } from "@/lib/workspace-context";
+import { ProjectSwitcher } from "@/components/project-switcher";
+
 function PlaygroundPage() {
+  const { currentProject } = useWorkspace();
   const [ops, setOps] = useState<ChangeOp[]>([
     { id: "1", op: "add", kind: "service", label: "Redis cache" },
   ]);
@@ -45,13 +49,14 @@ function PlaygroundPage() {
           </div>
           <h1 className="text-2xl font-display font-semibold tracking-tight">Simulate before you ship</h1>
           <p className="text-sm text-muted-foreground max-w-xl">
-            Stage architectural changes and preview their impact on performance, cost, complexity, security, and delivery time.
+            Stage architectural changes for {currentProject ? currentProject.name : "active project"} and preview their impact on performance, cost, complexity, security, and delivery time.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="ghost" onClick={() => setOps([])}><RotateCcw /> Discard</Button>
-          <Button variant="outline"><Sparkles /> Generate alternative</Button>
-          <Button><Check /> Apply changes</Button>
+        <div className="flex gap-2 items-center flex-wrap">
+          <ProjectSwitcher variant="inline" />
+          <Button variant="ghost" size="sm" onClick={() => setOps([])}><RotateCcw className="h-3.5 w-3.5 mr-1" /> Discard</Button>
+          <Button variant="outline" size="sm"><Sparkles className="h-3.5 w-3.5 mr-1" /> Alternative</Button>
+          <Button size="sm"><Check className="h-3.5 w-3.5 mr-1" /> Apply changes</Button>
         </div>
       </header>
 

@@ -4,7 +4,9 @@ import { DependencyAnalyzerService } from "../src/services/dependency-analyzer-s
 import { GitHubRepositoryProvider } from "../src/integrations/github-repository-provider.js";
 import { DriftDetectionService } from "../src/services/drift-service.js";
 import { architectureService } from "../src/services/architecture-service.js";
-import type { RepositorySnapshot, RepositoryAnalysis } from "../src/types/repository-intelligence.js";
+import { RepositoryIntelligenceService } from "../src/services/repository-intelligence-service.js";
+import { repositoryIntelligenceRepository } from "../src/repositories/repository-intelligence-repository.js";
+import type { RepositorySnapshot, RepositoryAnalysis, RepositoryRecord } from "../src/types/repository-intelligence.js";
 
 const snapshot = (files: RepositorySnapshot["files"]): RepositorySnapshot => ({
   commitSha: "fixture-sha-123456",
@@ -1827,6 +1829,273 @@ describe("Repository Intelligence & Security", () => {
       expect(emptyResult.score).toBeLessThanOrEqual(20);
       expect(emptyResult.score).not.toBe(100);
       expect(emptyResult.counts.scoreBreakdown?.analysisConfidence).toBe("low");
+    });
+  });
+
+  describe("Multi-Repository Management & Isolation", () => {
+    const projectId = "proj-multi-123";
+    const userId = "user-123";
+
+    const createMockRepo = (id: string, name: string, owner: string, branch = "main"): RepositoryRecord => ({
+      id,
+      project_id: projectId,
+      provider: "github",
+      repository_url: `https://github.com/${owner}/${name}`,
+      repository_name: name,
+      owner,
+      default_branch: branch,
+      access_type: "public",
+      external_repository_id: `ext-${id}`,
+      status: "active",
+      connected_by: userId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    const repo1 = createMockRepo("repo-uuid-1", "resume-builder", "amaan243");
+    const repo2 = createMockRepo("repo-uuid-2", "forge-app", "amaan243");
+
+    const analysis1: RepositoryAnalysis = {
+      id: "analysis-uuid-1",
+      repository_id: repo1.id,
+      project_id: projectId,
+      commit_sha: "sha-resume-111111",
+      status: "completed",
+      frameworks: ["React", "Express"],
+      languages: { TypeScript: 80, CSS: 20 },
+      dependencies: [{ name: "express", version: "4.18.2", ecosystem: "npm", type: "runtime" }],
+      infrastructure: {},
+      architecture: { services: ["Resume Service"], routes: [{ method: "GET", path: "/resumes", file: "resumes.ts", framework: "Express", confidence: "high", detectionBasis: "direct_app_route" }] },
+      metrics: { fileCount: 25 },
+      analysis_data: {},
+      started_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    };
+
+    const analysis2: RepositoryAnalysis = {
+      id: "analysis-uuid-2",
+      repository_id: repo2.id,
+      project_id: projectId,
+      commit_sha: "sha-forge-222222",
+      status: "completed",
+      frameworks: ["FastAPI", "Next.js"],
+      languages: { Python: 70, TypeScript: 30 },
+      dependencies: [{ name: "fastapi", version: "0.100.0", ecosystem: "pypi", type: "runtime" }],
+      infrastructure: { docker: true },
+      architecture: { services: ["Forge Engine"], routes: [{ method: "POST", path: "/analyze", file: "main.py", framework: "FastAPI", confidence: "high", detectionBasis: "direct_app_route" }] },
+      metrics: { fileCount: 85 },
+      analysis_data: {},
+      started_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    };
+
+    const mockProvider = {
+      connect: vi.fn().mockImplementation((input: { url: string; branch?: string }) => {
+        if (input.url.includes("resume-builder")) {
+          return Promise.resolve(repo1);
+        }
+        if (input.url.includes("forge-app")) {
+          return Promise.resolve(repo2);
+        }
+        return Promise.reject(new Error("Repository not found on GitHub"));
+      }),
+      fetchSnapshot: vi.fn().mockImplementation((_opts: { default_branch?: string }) => {
+        return Promise.resolve({
+          commitSha: "sha-new-333333",
+          repository: repo2,
+          files: [
+            { path: "package.json", content: JSON.stringify({ name: "forge-app", dependencies: { react: "^18.0.0" } }) },
+          ],
+        });
+      }),
+    };
+
+    const service = new RepositoryIntelligenceService(
+      { github: mockProvider as any },
+      new RepositoryAnalyzerService()
+    );
+
+    it("connects two different repositories to the same project without overwriting", async () => {
+      // Mock repository methods
+      vi.spyOn(repositoryIntelligenceRepository, "findActiveByUrl").mockResolvedValue(null);
+      vi.spyOn(repositoryIntelligenceRepository, "findByUrl").mockResolvedValue(null);
+      vi.spyOn(repositoryIntelligenceRepository, "connect")
+        .mockResolvedValueOnce(repo1)
+        .mockResolvedValueOnce(repo2);
+
+      const connected1 = await service.connect(projectId, userId, { url: "https://github.com/amaan243/resume-builder" });
+      const connected2 = await service.connect(projectId, userId, { url: "https://github.com/amaan243/forge-app" });
+
+      expect(connected1.id).toBe("repo-uuid-1");
+      expect(connected1.repository_name).toBe("resume-builder");
+      expect(connected2.id).toBe("repo-uuid-2");
+      expect(connected2.repository_name).toBe("forge-app");
+
+      // Verify list returns both repositories
+      vi.spyOn(repositoryIntelligenceRepository, "repositories").mockResolvedValue([repo1, repo2]);
+      vi.spyOn(repositoryIntelligenceRepository, "latestSuccessful").mockResolvedValue(null);
+      vi.spyOn(repositoryIntelligenceRepository, "latestAttempt").mockResolvedValue(null);
+      vi.spyOn(repositoryIntelligenceRepository, "activeAnalysis").mockResolvedValue(null);
+
+      const list = await service.list(projectId);
+      expect(list).toHaveLength(2);
+      expect(list.map((r) => r.repository.repository_name)).toEqual(["resume-builder", "forge-app"]);
+    });
+
+    it("rejects duplicate active repository URL with ConflictError", async () => {
+      vi.spyOn(repositoryIntelligenceRepository, "findActiveByUrl").mockResolvedValue(repo1);
+
+      await expect(
+        service.connect(projectId, userId, { url: "https://github.com/amaan243/resume-builder" })
+      ).rejects.toThrow("Repository 'resume-builder' is already connected to this project.");
+    });
+
+    it("reactivates a previously disconnected repository rather than creating a duplicate record", async () => {
+      const disconnectedRepo: RepositoryRecord = { ...repo1, status: "disconnected" };
+      vi.spyOn(repositoryIntelligenceRepository, "findActiveByUrl").mockResolvedValue(null);
+      vi.spyOn(repositoryIntelligenceRepository, "findByUrl").mockResolvedValue(disconnectedRepo);
+      vi.spyOn(repositoryIntelligenceRepository, "updateRepository").mockResolvedValue({
+        ...disconnectedRepo,
+        status: "active",
+      });
+
+      const reactivated = await service.connect(projectId, userId, { url: "https://github.com/amaan243/resume-builder" });
+      expect(reactivated.id).toBe(repo1.id);
+      expect(reactivated.status).toBe("active");
+    });
+
+    it("isolates snapshots and analysis history strictly by repository ID", async () => {
+      vi.spyOn(repositoryIntelligenceRepository, "repository")
+        .mockImplementation(async (_pId, rId) => {
+          if (rId === repo1.id) return repo1;
+          if (rId === repo2.id) return repo2;
+          return repo1;
+        });
+
+      vi.spyOn(repositoryIntelligenceRepository, "repositories").mockResolvedValue([repo1, repo2]);
+      vi.spyOn(repositoryIntelligenceRepository, "latestAnalysis")
+        .mockImplementation(async (_pId, rId) => {
+          if (rId === repo1.id) return analysis1;
+          if (rId === repo2.id) return analysis2;
+          return analysis1;
+        });
+      vi.spyOn(repositoryIntelligenceRepository, "latestSuccessful")
+        .mockImplementation(async (_pId, rId) => {
+          if (rId === repo1.id) return analysis1;
+          if (rId === repo2.id) return analysis2;
+          return analysis1;
+        });
+      vi.spyOn(repositoryIntelligenceRepository, "latestAttempt").mockResolvedValue(null);
+      vi.spyOn(repositoryIntelligenceRepository, "activeAnalysis").mockResolvedValue(null);
+      vi.spyOn(repositoryIntelligenceRepository, "analyses")
+        .mockImplementation(async (_pId, rId) => {
+          if (rId === repo1.id) return [analysis1];
+          if (rId === repo2.id) return [analysis2];
+          return [analysis1, analysis2];
+        });
+
+      // Get Repo 1
+      const res1 = await service.get(projectId, repo1.id);
+      expect(res1.repository?.repository_name).toBe("resume-builder");
+      expect(res1.latestAnalysis?.commit_sha).toBe("sha-resume-111111");
+
+      // Get Repo 2
+      const res2 = await service.get(projectId, repo2.id);
+      expect(res2.repository?.repository_name).toBe("forge-app");
+      expect(res2.latestAnalysis?.commit_sha).toBe("sha-forge-222222");
+
+      // History isolation
+      const hist1 = await service.analyses(projectId, repo1.id);
+      expect(hist1).toHaveLength(1);
+      expect(hist1[0].commit_sha).toBe("sha-resume-111111");
+
+      const hist2 = await service.analyses(projectId, repo2.id);
+      expect(hist2).toHaveLength(1);
+      expect(hist2[0].commit_sha).toBe("sha-forge-222222");
+    });
+
+    it("analyzes a new commit for a specific repository and records its commit SHA", async () => {
+      const mockCreatedAnalysis: RepositoryAnalysis = {
+        id: "analysis-uuid-3",
+        repository_id: repo2.id,
+        project_id: projectId,
+        commit_sha: "sha-pending",
+        status: "queued",
+        frameworks: [],
+        languages: {},
+        dependencies: [],
+        infrastructure: {},
+        architecture: {},
+        metrics: {},
+        analysis_data: { branch: "develop" },
+        started_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+      };
+
+      const mockCompletedAnalysis: RepositoryAnalysis = {
+        ...mockCreatedAnalysis,
+        commit_sha: "sha-new-333333",
+        status: "completed",
+        completed_at: new Date().toISOString(),
+      };
+
+      vi.spyOn(repositoryIntelligenceRepository, "repository").mockResolvedValue(repo2);
+      vi.spyOn(repositoryIntelligenceRepository, "createAnalysis").mockResolvedValue(mockCreatedAnalysis);
+      vi.spyOn(repositoryIntelligenceRepository, "updateAnalysis")
+        .mockResolvedValueOnce({ ...mockCreatedAnalysis, status: "running" })
+        .mockResolvedValueOnce(mockCompletedAnalysis);
+      vi.spyOn(repositoryIntelligenceRepository, "replaceDependencies").mockResolvedValue(undefined as any);
+
+      const result = await service.analyze(projectId, userId, undefined, repo2.id);
+
+      expect(mockProvider.fetchSnapshot).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: repo2.id,
+          default_branch: "develop",
+        })
+      );
+      expect(result.commit_sha).toBe("sha-new-333333");
+      expect(result.repository_id).toBe(repo2.id);
+    });
+
+    it("runs Architecture Drift independently for each repository snapshot without cross-repo leakage", async () => {
+      const driftService = new DriftDetectionService();
+
+      const baseArchitecture = {
+        version: { id: "arch-v1", project_id: projectId, version_number: 1 },
+        nodes: [
+          { id: "node-1", name: "Resume Service", type: "service", category: "service", properties: { framework: "Express" } },
+        ],
+        edges: [],
+      };
+
+      vi.spyOn(architectureService, "getVersion").mockResolvedValue(baseArchitecture as any);
+
+      // Compare with repo 1 (Resume Service exists)
+      const drift1 = await driftService.compare(projectId, "arch-v1", analysis1);
+      expect(drift1.score).toBeGreaterThan(50);
+      expect(drift1.items.some((i) => i.type === "missing" && i.metadata.affectedComponent === "Resume Service")).toBe(false);
+
+      // Compare with repo 2 (Forge Engine exists, Resume Service missing)
+      const drift2 = await driftService.compare(projectId, "arch-v1", analysis2);
+      expect(drift2.items.some((i) => i.type === "missing" && i.metadata.affectedComponent === "Resume Service")).toBe(true);
+      expect(drift1.score).toBeGreaterThan(drift2.score);
+    });
+
+    it("soft-disconnects a repository while preserving analysis history and records", async () => {
+      const disconnectSpy = vi.spyOn(repositoryIntelligenceRepository, "disconnect").mockResolvedValue();
+
+      await service.disconnect(projectId, repo1.id);
+      expect(disconnectSpy).toHaveBeenCalledWith(projectId, repo1.id);
+
+      // Analysis history remains fetchable
+      vi.spyOn(repositoryIntelligenceRepository, "analyses").mockResolvedValue([analysis1]);
+      const preservedHistory = await service.analyses(projectId, repo1.id);
+      expect(preservedHistory).toHaveLength(1);
+      expect(preservedHistory[0].commit_sha).toBe("sha-resume-111111");
     });
   });
 });

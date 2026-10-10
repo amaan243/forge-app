@@ -100,10 +100,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       const data = await getProjects(currentWorkspace.id);
       setProjects(data);
 
+      let urlProjId: string | null = null;
+      if (typeof window !== "undefined") {
+        urlProjId = new URLSearchParams(window.location.search).get("projectId");
+      }
       const savedProjId = typeof window !== "undefined" ? localStorage.getItem("archforge_active_project_id") : null;
-      const matched = data.find((p) => p.id === savedProjId);
+      const targetId = urlProjId || savedProjId;
+      const matched = data.find((p) => p.id === targetId);
       if (matched) {
         setCurrentProject(matched);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("archforge_active_project_id", matched.id);
+        }
       } else if (data.length > 0) {
         setCurrentProject(data[0]);
         if (typeof window !== "undefined") {
@@ -126,6 +134,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   // Select workspace
   const selectWorkspace = useCallback((workspace: Workspace | null) => {
     setCurrentWorkspace(workspace);
+    setProjects([]);
+    setCurrentProject(null);
     if (workspace && typeof window !== "undefined") {
       localStorage.setItem("archforge_active_workspace_id", workspace.id);
     }

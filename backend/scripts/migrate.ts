@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { Client } from "pg";
 import { env } from "../src/config/env.js";
-const client = new Client({ connectionString: env.DATABASE_URL });
+const client = new Client({ connectionString: env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await client.connect();
 await client.query("create table if not exists public.schema_migrations (version text primary key, applied_at timestamptz not null default now())");
 const migrations = (await readdir(new URL("../supabase/migrations/", import.meta.url))).filter((file) => file.endsWith(".sql")).sort();

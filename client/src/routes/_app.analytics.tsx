@@ -36,13 +36,18 @@ const SERVICES = [
   { name: "Workers", pct: 8 },
 ];
 
+import { ProjectSwitcher } from "@/components/project-switcher";
+
 function AnalyticsPage() {
   return (
     <div className="p-6 lg:p-8 space-y-6">
-      <header className="space-y-2">
-        <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Rolling 12 weeks</div>
-        <h1 className="text-2xl font-display font-semibold tracking-tight">Analytics</h1>
-        <p className="text-sm text-muted-foreground">Objective signals across architecture, documentation, and code health.</p>
+      <header className="flex items-end justify-between gap-4 flex-wrap">
+        <div className="space-y-2">
+          <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Rolling 12 weeks</div>
+          <h1 className="text-2xl font-display font-semibold tracking-tight">Analytics</h1>
+          <p className="text-sm text-muted-foreground">Objective signals across architecture, documentation, and code health.</p>
+        </div>
+        <ProjectSwitcher variant="inline" />
       </header>
 
       <div className="grid md:grid-cols-4 gap-3">

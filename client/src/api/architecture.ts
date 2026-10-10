@@ -358,3 +358,94 @@ export async function deleteArchitectureEdge(
     `/api/v1/projects/${projectId}/architecture/versions/${versionId}/edges/${edgeId}`
   );
 }
+
+// ─── Compare API ──────────────────────────────────────────────────────────────
+
+export interface ArchitectureComparison {
+  added: ArchitectureNode[];
+  removed: ArchitectureNode[];
+  modified: ArchitectureNode[];
+  unchanged: ArchitectureNode[];
+  summary: {
+    addedNodes: number;
+    removedNodes: number;
+    modifiedNodes: number;
+    addedEdges: number;
+    removedEdges: number;
+    technologyChanges: number;
+  };
+}
+
+export async function compareArchitectureVersions(
+  projectId: string,
+  fromVersionId: string,
+  toVersionId: string
+): Promise<ArchitectureComparison> {
+  const response = await apiClient.get<{ success: boolean; data: ArchitectureComparison }>(
+    `/api/v1/projects/${projectId}/architecture/compare`,
+    { params: { from: fromVersionId, to: toVersionId } }
+  );
+  return response.data.data;
+}
+
+// ─── Timeline API ─────────────────────────────────────────────────────────────
+
+export interface TimelineEvent {
+  id: string;
+  project_id: string;
+  workspace_id: string;
+  user_id: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export async function getTimelineEvents(projectId: string): Promise<TimelineEvent[]> {
+  const response = await apiClient.get<{ success: boolean; data: TimelineEvent[] }>(
+    `/api/v1/projects/${projectId}/architecture/timeline`
+  );
+  return response.data.data;
+}
+
+// ─── Architecture Snapshots API ───────────────────────────────────────────────
+
+export interface ArchitectureSnapshot {
+  id: string;
+  project_id: string;
+  version_id: string;
+  name: string;
+  description: string | null;
+  snapshot_data: Record<string, unknown>;
+  created_by: string;
+  created_at: string;
+}
+
+export async function getArchitectureSnapshots(projectId: string): Promise<ArchitectureSnapshot[]> {
+  const response = await apiClient.get<{ success: boolean; data: ArchitectureSnapshot[] }>(
+    `/api/v1/projects/${projectId}/architecture/snapshots`
+  );
+  return response.data.data;
+}
+
+export async function createArchitectureSnapshot(
+  projectId: string,
+  data: { version_id: string; name: string; description?: string }
+): Promise<ArchitectureSnapshot> {
+  const response = await apiClient.post<{ success: boolean; data: ArchitectureSnapshot }>(
+    `/api/v1/projects/${projectId}/architecture/snapshots`,
+    data
+  );
+  return response.data.data;
+}
+
+export async function restoreArchitectureSnapshot(
+  projectId: string,
+  snapshotId: string
+): Promise<ArchitectureGraph> {
+  const response = await apiClient.post<{ success: boolean; data: ArchitectureGraph }>(
+    `/api/v1/projects/${projectId}/architecture/snapshots/${snapshotId}/restore`
+  );
+  return response.data.data;
+}

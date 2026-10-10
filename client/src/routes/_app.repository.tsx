@@ -21,11 +21,23 @@ import {
   CheckCircle,
   FileCode,
   ShieldCheck,
+  Plus,
+  RefreshCw,
+  Globe,
+  Lock,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useWorkspace } from "@/lib/workspace-context";
+import { ProjectSwitcher } from "@/components/project-switcher";
 import {
   getRepositoryStatus,
   connectRepository,
@@ -60,6 +72,12 @@ function RepositoryPage() {
   const [connecting, setConnecting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
 
+  // Multi-repository state
+  const [repositoriesList, setRepositoriesList] = useState<RepositoryRecord[]>([]);
+  const [selectedRepoId, setSelectedRepoId] = useState<string>("");
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
+
   const [repository, setRepository] = useState<RepositoryRecord | null>(null);
   const [latestAnalysis, setLatestAnalysis] = useState<RepositoryAnalysis | null>(null);
   const [latestAttempt, setLatestAttempt] = useState<RepositoryAnalysis | null>(null);
@@ -75,46 +93,110 @@ function RepositoryPage() {
   const [repoBranch, setRepoBranch] = useState("main");
   const [accessType, setAccessType] = useState<"public" | "private">("public");
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (targetRepoId?: string) => {
     if (!currentProject) return;
     setLoading(true);
     try {
-      const data = await getRepositoryStatus(currentProject.id);
-      setRepository(data.repository);
+      const activeId = targetRepoId !== undefined ? targetRepoId : selectedRepoId;
+      const data = await getRepositoryStatus(currentProject.id, activeId || undefined);
+
+      const allActive = (data.repositories || []).filter((r) => r.status !== "disconnected");
+      setRepositoriesList(allActive);
+
+      const currentRepo = data.repository || (allActive.length > 0 ? allActive[0] : null);
+      setRepository(currentRepo);
+
+      if (currentRepo) {
+        setSelectedRepoId(currentRepo.id);
+        setRepoBranch(currentRepo.default_branch || "main");
+        const hist = await getRepositoryAnalyses(currentProject.id, currentRepo.id);
+        setHistoryList(hist);
+      } else {
+        setSelectedRepoId("");
+        setHistoryList([]);
+      }
+
       setLatestAnalysis(data.latestAnalysis || data.latestSuccessful || null);
       setLatestAttempt(data.latestAttempt || null);
       setActiveAnalysis(data.activeAnalysis);
-
-      if (data.repository) {
-        setRepoBranch(data.repository.default_branch || "main");
-        const hist = await getRepositoryAnalyses(currentProject.id);
-        setHistoryList(hist);
-      } else {
-        setHistoryList([]);
-      }
     } catch {
       // Global error handler notifies user
     } finally {
       setLoading(false);
     }
-  }, [currentProject]);
+  }, [currentProject, selectedRepoId]);
 
+  // Project change reset & stale request cancellation
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    setRepositoriesList([]);
+    setSelectedRepoId("");
+    setRepository(null);
+    setLatestAnalysis(null);
+    setLatestAttempt(null);
+    setActiveAnalysis(null);
+    setHistoryList([]);
+
+    if (!currentProject) {
+      setLoading(false);
+      return;
+    }
+
+    let isCurrent = true;
+    setLoading(true);
+
+    const loadInitial = async () => {
+      try {
+        const data = await getRepositoryStatus(currentProject.id);
+        if (!isCurrent) return;
+
+        const allActive = (data.repositories || []).filter((r) => r.status !== "disconnected");
+        setRepositoriesList(allActive);
+
+        const currentRepo = data.repository || (allActive.length > 0 ? allActive[0] : null);
+        setRepository(currentRepo);
+
+        if (currentRepo) {
+          setSelectedRepoId(currentRepo.id);
+          setRepoBranch(currentRepo.default_branch || "main");
+          const hist = await getRepositoryAnalyses(currentProject.id, currentRepo.id);
+          if (!isCurrent) return;
+          setHistoryList(hist);
+        } else {
+          setSelectedRepoId("");
+          setHistoryList([]);
+        }
+
+        setLatestAnalysis(data.latestAnalysis || data.latestSuccessful || null);
+        setLatestAttempt(data.latestAttempt || null);
+        setActiveAnalysis(data.activeAnalysis);
+      } catch {
+        // Global error handler
+      } finally {
+        if (isCurrent) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadInitial();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [currentProject?.id]);
 
   // Polling when analysis is active (queued or running)
   useEffect(() => {
-    if (!activeAnalysis || !currentProject) return;
+    if (!activeAnalysis || !currentProject || !selectedRepoId) return;
     const interval = setInterval(async () => {
       try {
-        const data = await getRepositoryStatus(currentProject.id);
+        const data = await getRepositoryStatus(currentProject.id, selectedRepoId);
         setActiveAnalysis(data.activeAnalysis);
         if (!data.activeAnalysis || data.activeAnalysis.status === "completed" || data.activeAnalysis.status === "failed") {
           setLatestAnalysis(data.latestAnalysis || data.latestSuccessful || null);
           setLatestAttempt(data.latestAttempt || null);
           setAnalyzing(false);
-          const hist = await getRepositoryAnalyses(currentProject.id);
+          const hist = await getRepositoryAnalyses(currentProject.id, selectedRepoId);
           setHistoryList(hist);
           clearInterval(interval);
           if (data.latestAnalysis?.status === "completed" || data.latestSuccessful?.status === "completed") {
@@ -129,7 +211,12 @@ function RepositoryPage() {
     }, 2500);
 
     return () => clearInterval(interval);
-  }, [activeAnalysis, currentProject]);
+  }, [activeAnalysis, currentProject, selectedRepoId]);
+
+  const handleSelectRepo = (repoId: string) => {
+    setSelectedRepoId(repoId);
+    fetchData(repoId);
+  };
 
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,51 +224,68 @@ function RepositoryPage() {
       toast.error("Please select a project first");
       return;
     }
-    if (!repoUrl.trim()) {
+    const trimmed = repoUrl.trim();
+    if (!trimmed) {
       toast.error("Please enter a GitHub repository URL");
       return;
     }
+
+    const match = trimmed.match(/^https?:\/\/(www\.)?github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)(\/)?$/);
+    if (!match) {
+      toast.error("Please enter a valid GitHub repository URL (e.g. https://github.com/owner/repository)");
+      return;
+    }
+
     setConnecting(true);
     try {
       const res = await connectRepository(currentProject.id, {
-        repository_url: repoUrl.trim(),
+        repository_url: trimmed,
         branch: repoBranch.trim() || "main",
         provider: "github",
         access_type: accessType,
       });
-      setRepository(res);
-      toast.success("GitHub repository connected successfully");
-      await fetchData();
-    } catch {
-      // Handled by client interceptor
+      toast.success(`Connected repository ${res.owner}/${res.repository_name}`);
+      setIsAddModalOpen(false);
+      setRepoUrl("");
+      setSelectedRepoId(res.id);
+      await fetchData(res.id);
+    } catch (err: unknown) {
+      const errorObj = err as { response?: { data?: { message?: string } }; message?: string };
+      const msg = errorObj.response?.data?.message || errorObj.message || "Failed to connect repository";
+      toast.error(msg);
     } finally {
       setConnecting(false);
     }
   };
 
-  const handleDisconnect = async () => {
-    if (!currentProject) return;
-    if (!confirm("Are you sure you want to disconnect this repository? Analysis history will be removed.")) return;
+  const handleConfirmDisconnect = async () => {
+    if (!currentProject || !repository) return;
     try {
-      await disconnectRepository(currentProject.id);
-      setRepository(null);
-      setLatestAnalysis(null);
-      setLatestAttempt(null);
-      setActiveAnalysis(null);
-      setHistoryList([]);
-      toast.success("Repository disconnected");
-    } catch {
-      // Handled
+      await disconnectRepository(currentProject.id, repository.id);
+      toast.success(`Disconnected ${repository.owner}/${repository.repository_name}. Analysis history preserved.`);
+      setIsDisconnectModalOpen(false);
+      const remaining = repositoriesList.filter((r) => r.id !== repository.id);
+      const nextRepoId = remaining.length > 0 ? remaining[0].id : "";
+      setSelectedRepoId(nextRepoId);
+      await fetchData(nextRepoId);
+    } catch (err: unknown) {
+      const errorObj = err as { response?: { data?: { message?: string } }; message?: string };
+      const msg = errorObj.response?.data?.message || errorObj.message || "Failed to disconnect repository";
+      toast.error(msg);
     }
   };
 
   const handleAnalyze = async () => {
-    if (!currentProject) return;
+    if (!currentProject || !repository) return;
     setAnalyzing(true);
     try {
-      const analysis = await triggerRepositoryAnalysis(currentProject.id, repoBranch.trim() || "main");
+      const analysis = await triggerRepositoryAnalysis(
+        currentProject.id,
+        repoBranch.trim() || repository.default_branch || "main",
+        repository.id
+      );
       setActiveAnalysis(analysis);
-      toast.info("Repository analysis queued. Scanning files...");
+      toast.info(`Repository analysis queued for ${repository.owner}/${repository.repository_name} on branch ${repoBranch}...`);
     } catch {
       setAnalyzing(false);
     }
@@ -272,7 +376,7 @@ function RepositoryPage() {
     );
   }
 
-  if (loading && !repository) {
+  if (loading && !repository && repositoriesList.length === 0) {
     return (
       <div className="p-6 lg:p-8 space-y-6">
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -282,13 +386,13 @@ function RepositoryPage() {
     );
   }
 
-  // Not connected state
-  if (!repository) {
+  // Not connected state (no repositories connected to this project)
+  if (!repository && repositoriesList.length === 0) {
     return (
       <div className="p-6 lg:p-8 space-y-6">
         <header className="space-y-2">
-          <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
-            Project: {currentProject.name}
+          <div className="flex items-center gap-2">
+            <ProjectSwitcher variant="inline" />
           </div>
           <h1 className="text-2xl font-display font-semibold tracking-tight">Connect Repository</h1>
           <p className="text-sm text-muted-foreground">
@@ -376,49 +480,105 @@ function RepositoryPage() {
   return (
     <div className="p-6 lg:p-8 space-y-6">
       <header className="flex items-end justify-between gap-4 flex-wrap">
-        <div className="space-y-1">
-          <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <span>github.com / {repository.owner} / {repository.repository_name}</span>
-            <span className="h-1.5 w-1.5 rounded-full bg-success" />
-            <span className="text-[10px] text-success capitalize">{repository.access_type}</span>
+        <div className="space-y-2">
+          {/* Workspace & Multi-Repo Switcher Bar */}
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <ProjectSwitcher variant="inline" />
+            <span className="text-muted-foreground/60">/</span>
+
+            {/* Repository Dropdown Selector */}
+            {repositoriesList.length > 0 && repository && (
+              <div className="flex items-center gap-2">
+                <select
+                  value={repository.id}
+                  onChange={(e) => handleSelectRepo(e.target.value)}
+                  className="h-7 rounded border border-input bg-background px-2 text-xs font-mono font-medium focus:ring-1 focus:ring-primary"
+                >
+                  {repositoriesList.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.owner}/{r.repository_name} ({r.access_type})
+                    </option>
+                  ))}
+                </select>
+                <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                <span className="text-[10px] text-success font-mono capitalize">{repository.access_type}</span>
+              </div>
+            )}
           </div>
-          <h1 className="text-2xl font-display font-semibold tracking-tight">{repository.repository_name}</h1>
-          <p className="text-sm text-muted-foreground">
-            Static analysis of <span className="font-mono text-foreground">{repository.default_branch}</span>
-            {latestAnalysis?.commit_sha && (
-              <> · Commit <span className="font-mono text-foreground">{latestAnalysis.commit_sha.slice(0, 7)}</span></>
-            )}
-            {latestAnalysis?.completed_at && (
-              <> · Analyzed {new Date(latestAnalysis.completed_at).toLocaleString()}</>
-            )}
-          </p>
+
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-display font-semibold tracking-tight">
+              {repository ? repository.repository_name : "Repositories"}
+            </h1>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsAddModalOpen(true)}
+              className="h-7 text-xs gap-1 border-dashed"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add Repository
+            </Button>
+          </div>
+
+          {repository && (
+            <p className="text-sm text-muted-foreground">
+              Static analysis of <span className="font-mono text-foreground">{repository.default_branch}</span>
+              {latestAnalysis?.commit_sha && (
+                <> · Commit <span className="font-mono text-foreground">{latestAnalysis.commit_sha.slice(0, 7)}</span></>
+              )}
+              {latestAnalysis?.completed_at && (
+                <> · Analyzed {new Date(latestAnalysis.completed_at).toLocaleString()}</>
+              )}
+            </p>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <GitBranch className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              value={repoBranch}
-              onChange={(e) => setRepoBranch(e.target.value)}
-              className="pl-8 font-mono text-xs h-8 w-36"
-              placeholder="branch"
-            />
+        {repository && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => fetchData(repository.id)}
+              disabled={loading}
+              title="Refresh repository details"
+              className="h-8 px-2 text-muted-foreground hover:text-foreground"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            </Button>
+
+            <div className="relative">
+              <GitBranch className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={repoBranch}
+                onChange={(e) => setRepoBranch(e.target.value)}
+                className="pl-8 font-mono text-xs h-8 w-36"
+                placeholder="branch"
+              />
+            </div>
+
+            <Button onClick={handleAnalyze} disabled={Boolean(isRunning) || analyzing} size="sm">
+              {isRunning || analyzing ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Analyzing...
+                </>
+              ) : (
+                <>
+                  <Play className="h-3.5 w-3.5 mr-1.5" /> Analyze
+                </>
+              )}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsDisconnectModalOpen(true)}
+              className="text-destructive hover:text-destructive h-8 px-2.5"
+              title="Disconnect repository"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Disconnect
+            </Button>
           </div>
-          <Button onClick={handleAnalyze} disabled={Boolean(isRunning) || analyzing} size="sm">
-            {isRunning || analyzing ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Analyzing...
-              </>
-            ) : (
-              <>
-                <Play className="h-3.5 w-3.5 mr-1.5" /> Analyze
-              </>
-            )}
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleDisconnect} className="text-destructive hover:text-destructive">
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+        )}
       </header>
 
       {/* Active Analysis Banner */}
@@ -1056,6 +1216,132 @@ function RepositoryPage() {
           </div>
         </div>
       )}
+
+      {/* Add Repository Modal */}
+      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Connect GitHub Repository</DialogTitle>
+            <DialogDescription>
+              Connect an additional repository to {currentProject.name}. Each repository has its own branches, snapshots, and analysis history.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleConnect} className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                GitHub Repository URL
+              </label>
+              <Input
+                placeholder="https://github.com/owner/repository"
+                value={repoUrl}
+                onChange={(e) => setRepoUrl(e.target.value)}
+                required
+                className="font-mono text-sm"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Example: <span className="font-mono text-foreground">https://github.com/expressjs/express</span>
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                  Default Branch
+                </label>
+                <div className="relative">
+                  <GitBranch className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="main"
+                    value={repoBranch}
+                    onChange={(e) => setRepoBranch(e.target.value)}
+                    className="pl-8 font-mono text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                  Repository Visibility
+                </label>
+                <select
+                  value={accessType}
+                  onChange={(e) => setAccessType(e.target.value as "public" | "private")}
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs font-mono"
+                >
+                  <option value="public">Public Repository</option>
+                  <option value="private">Private Repository</option>
+                </select>
+              </div>
+            </div>
+
+            {accessType === "private" && (
+              <div className="p-3 rounded border border-warning/30 bg-warning/5 text-xs text-warning flex items-start gap-2">
+                <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  Private repositories require <code className="font-mono bg-warning/20 px-1 py-0.5 rounded">GITHUB_TOKEN</code> configured on the server.
+                </span>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsAddModalOpen(false)}
+                disabled={connecting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={connecting}>
+                {connecting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" /> Connecting...
+                  </>
+                ) : (
+                  "Connect Repository"
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Disconnect Confirmation Modal */}
+      <Dialog open={isDisconnectModalOpen} onOpenChange={setIsDisconnectModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" /> Disconnect Repository
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to disconnect <strong className="text-foreground">{repository?.owner}/{repository?.repository_name}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="text-xs text-muted-foreground space-y-2 py-2">
+            <p>
+              Disconnecting removes this repository from active project views. All previous analysis history, snapshots, and architecture versions will be safely preserved.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDisconnectModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDisconnect}
+            >
+              Disconnect Repository
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

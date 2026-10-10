@@ -22,6 +22,11 @@ import { logger } from "../lib/logger.js";
 const userId = (request: Parameters<RequestHandler>[0]) => (request as unknown as AuthenticatedRequest).userId;
 
 export const repositoryIntelligenceController = {
+  list: (async (request, response) => {
+    const data = await repositoryIntelligenceService.list(String(request.params.projectId));
+    response.json({ success: true, message: "Repositories retrieved", data });
+  }) as RequestHandler,
+
   connect: (async (request, response) => {
     const input = repositoryConnect.parse(request.body);
     const data = await repositoryIntelligenceService.connect(String(request.params.projectId), userId(request), {
@@ -35,22 +40,34 @@ export const repositoryIntelligenceController = {
   }) as RequestHandler,
 
   get: (async (request, response) => {
-    const data = await repositoryIntelligenceService.get(String(request.params.projectId));
+    const repositoryId = request.params.repositoryId
+      ? String(request.params.repositoryId)
+      : request.query.repositoryId
+      ? String(request.query.repositoryId)
+      : undefined;
+    const data = await repositoryIntelligenceService.get(String(request.params.projectId), repositoryId);
     response.json({ success: true, message: "Repository retrieved", data });
   }) as RequestHandler,
 
   remove: (async (request, response) => {
-    await repositoryIntelligenceService.disconnect(String(request.params.projectId));
+    const repositoryId = request.params.repositoryId
+      ? String(request.params.repositoryId)
+      : request.query.repositoryId
+      ? String(request.query.repositoryId)
+      : undefined;
+    await repositoryIntelligenceService.disconnect(String(request.params.projectId), repositoryId);
     response.status(204).send();
   }) as RequestHandler,
 
   analyses: (async (request, response) => {
-    const data = await repositoryIntelligenceService.analyses(String(request.params.projectId));
+    const repositoryId = request.query.repositoryId ? String(request.query.repositoryId) : undefined;
+    const data = await repositoryIntelligenceService.analyses(String(request.params.projectId), repositoryId);
     response.json({ success: true, message: "Repository analyses retrieved", data });
   }) as RequestHandler,
 
   latestAnalysis: (async (request, response) => {
-    const data = await repositoryIntelligenceService.latestAnalysis(String(request.params.projectId));
+    const repositoryId = request.query.repositoryId ? String(request.query.repositoryId) : undefined;
+    const data = await repositoryIntelligenceService.latestAnalysis(String(request.params.projectId), repositoryId);
     response.json({ success: true, message: "Latest analysis retrieved", data });
   }) as RequestHandler,
 
@@ -66,15 +83,16 @@ export const repositoryIntelligenceController = {
     const projectId = String(request.params.projectId);
     const trigger = repositoryAnalyzeTrigger.parse(request.body ?? {});
     const currentUserId = userId(request);
+    const repositoryId = trigger?.repository_id || (request.query.repositoryId ? String(request.query.repositoryId) : undefined);
 
-    // Prevent duplicate concurrent work if one is already active
-    const active = await repositoryIntelligenceRepository.activeAnalysis(projectId);
+    // Prevent duplicate concurrent work if one is already active for this repository
+    const active = await repositoryIntelligenceRepository.activeAnalysis(projectId, repositoryId);
     if (active) {
       response.status(202).json({ success: true, message: "Analysis is already in progress", data: active });
       return;
     }
 
-    const analysis = await repositoryIntelligenceService.enqueueAnalysis(projectId, currentUserId, trigger?.branch);
+    const analysis = await repositoryIntelligenceService.enqueueAnalysis(projectId, currentUserId, trigger?.branch, repositoryId);
 
     // Check if Redis is running and reachable
     const hasRedis = await isRedisAvailable();
@@ -90,7 +108,7 @@ export const repositoryIntelligenceController = {
       } catch (queueError) {
         logger.warn("Redis BullMQ queue unavailable; running controlled asynchronous analysis:", queueError);
         setImmediate(() => {
-          repositoryIntelligenceService.analyze(projectId, currentUserId, analysis.id).catch((err) => {
+          repositoryIntelligenceService.analyze(projectId, currentUserId, analysis.id, repositoryId).catch((err) => {
             logger.error("Controlled asynchronous repository analysis failed:", err);
           });
         });
@@ -98,7 +116,7 @@ export const repositoryIntelligenceController = {
     } else {
       // Development mode / Redis offline: execute asynchronous bounded job ensuring status lifecycle
       setImmediate(() => {
-        repositoryIntelligenceService.analyze(projectId, currentUserId, analysis.id).catch((err) => {
+        repositoryIntelligenceService.analyze(projectId, currentUserId, analysis.id, repositoryId).catch((err) => {
           logger.error("Controlled asynchronous repository analysis failed:", err);
         });
       });
@@ -108,9 +126,11 @@ export const repositoryIntelligenceController = {
   }) as RequestHandler,
 
   dependencies: (async (request, response) => {
+    const query = dependencyQuery.parse(request.query);
+    const repositoryId = query.repositoryId || (request.query.repositoryId ? String(request.query.repositoryId) : undefined);
     const dependencies = await repositoryIntelligenceService.dependencies(
       String(request.params.projectId),
-      dependencyQuery.parse(request.query)
+      { ...query, repositoryId }
     );
     const graph = dependencyAnalyzerService.graph(dependencies);
     response.json({ success: true, message: "Dependencies retrieved", data: graph });
@@ -137,7 +157,16 @@ export const repositoryIntelligenceController = {
       });
     }
 
-    // 2. Resolve selected or latest completed repository analysis
+    // 2. Validate repository if provided
+    let targetRepo = null;
+    if (input.repository_id) {
+      targetRepo = await repositoryIntelligenceRepository.repository(projectId, input.repository_id);
+      if (!targetRepo || targetRepo.project_id !== projectId) {
+        throw new NotFoundError("Repository not found for this project");
+      }
+    }
+
+    // 3. Resolve selected or latest completed repository analysis
     let analysis;
     if (input.repository_analysis_id) {
       analysis = await repositoryIntelligenceRepository.analysis(input.repository_analysis_id);
@@ -149,10 +178,15 @@ export const repositoryIntelligenceController = {
           repository: "The selected repository analysis snapshot must be completed before drift detection.",
         });
       }
+      if (targetRepo && analysis.repository_id && analysis.repository_id !== targetRepo.id) {
+        throw new ValidationError({
+          repository: "The selected repository analysis snapshot does not belong to the selected repository.",
+        });
+      }
     } else {
-      analysis = await repositoryIntelligenceRepository.latestSuccessful(projectId);
+      analysis = await repositoryIntelligenceRepository.latestSuccessful(projectId, targetRepo?.id);
       if (!analysis) {
-        analysis = await repositoryIntelligenceRepository.latestAnalysis(projectId);
+        analysis = await repositoryIntelligenceRepository.latestAnalysis(projectId, targetRepo?.id);
       }
     }
 
@@ -162,11 +196,11 @@ export const repositoryIntelligenceController = {
       });
     }
 
-    // 3. Resolve project repository reference
-    const repo = await repositoryIntelligenceRepository.repository(projectId);
+    // 4. Resolve project repository reference
+    const repo = targetRepo || (analysis.repository_id ? await repositoryIntelligenceRepository.repository(projectId, analysis.repository_id) : await repositoryIntelligenceRepository.repository(projectId));
     const repositoryId = analysis.repository_id || repo?.id || null;
 
-    // 4. Deterministic drift detection
+    // 5. Deterministic drift detection
     const result = await driftDetectionService.compare(projectId, version.version.id, analysis);
 
     // 5. Persist drift analysis and items
@@ -219,7 +253,8 @@ export const repositoryIntelligenceController = {
   }) as RequestHandler,
 
   drifts: (async (request, response) => {
-    const data = await repositoryIntelligenceRepository.drifts(String(request.params.projectId));
+    const repositoryId = request.query.repositoryId ? String(request.query.repositoryId) : undefined;
+    const data = await repositoryIntelligenceRepository.drifts(String(request.params.projectId), repositoryId);
     response.json({ success: true, message: "Drift analyses retrieved", data });
   }) as RequestHandler,
 

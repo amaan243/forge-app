@@ -75,7 +75,9 @@ export class DriftDetectionService {
     };
 
     const actualFrameworks = (analysis.frameworks as string[]) || actual.technologies || [];
-    const actualServices = actual.services || [];
+    const actualServices = (actual.services || []).map((s: any) =>
+      typeof s === "string" ? s : s?.path || s?.name || String(s)
+    );
     const actualDatabases = actual.databases || [];
     const actualApis = actual.apis || [];
     const actualRoutes = actual.routes || [];

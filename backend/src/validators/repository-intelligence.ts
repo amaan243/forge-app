@@ -16,16 +16,19 @@ export const repositoryConnect = z.object({
 
 export const repositoryAnalyzeTrigger = z.object({
   branch: z.string().trim().min(1).max(255).optional(),
+  repository_id: z.string().uuid("Invalid repository ID").optional(),
 });
 
 export const dependencyQuery = z.object({
   type: z.enum(["runtime", "development", "peer", "infrastructure"]).optional(),
   risk: z.enum(["low", "medium", "high", "critical"]).optional(),
   ecosystem: z.string().max(40).optional(),
+  repositoryId: z.string().uuid("Invalid repository ID").optional(),
 });
 
 export const driftAnalyzeInput = z.object({
   architecture_version_id: z.string().uuid("Invalid architecture version ID").optional(),
+  repository_id: z.string().uuid("Invalid repository ID").optional(),
   repository_analysis_id: z.string().uuid("Invalid repository analysis snapshot ID").optional(),
 });
 

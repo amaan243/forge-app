@@ -1,4 +1,4 @@
-import { NotFoundError } from "../errors/app-error.js";
+import { ConflictError, NotFoundError } from "../errors/app-error.js";
 import { GitHubRepositoryProvider } from "../integrations/github-repository-provider.js";
 import type { RepositoryProvider } from "../integrations/repository-provider.js";
 import { repositoryIntelligenceRepository } from "../repositories/repository-intelligence-repository.js";
@@ -30,10 +30,24 @@ export class RepositoryIntelligenceService {
       tokenReference: input.tokenReference,
     });
 
-    // Check if repository record already exists for project
-    const existing = await repositoryIntelligenceRepository.repository(projectId);
-    if (existing) {
-      await repositoryIntelligenceRepository.disconnect(projectId);
+    // Check if this repository is already actively connected to this project
+    const existingActive = await repositoryIntelligenceRepository.findActiveByUrl(projectId, external.repository_url);
+    if (existingActive) {
+      throw new ConflictError(`Repository '${external.repository_name}' is already connected to this project.`);
+    }
+
+    // If this repository was previously disconnected, reactivate it rather than creating a duplicate
+    const previouslyDisconnected = await repositoryIntelligenceRepository.findByUrl(projectId, external.repository_url);
+    if (previouslyDisconnected) {
+      return repositoryIntelligenceRepository.updateRepository(previouslyDisconnected.id, {
+        status: "active",
+        default_branch: input.branch || external.default_branch || previouslyDisconnected.default_branch || "main",
+        access_type: input.accessType || external.access_type || "public",
+        external_repository_id: external.external_repository_id,
+        connected_by: userId,
+        credential_reference: input.tokenReference || previouslyDisconnected.credential_reference,
+        updated_at: new Date().toISOString(),
+      });
     }
 
     const { id: _id, project_id: _projectId, connected_by: _connectedBy, created_at: _createdAt, updated_at: _updatedAt, ...repository } = external;
@@ -49,59 +63,89 @@ export class RepositoryIntelligenceService {
       connected_by: userId,
       default_branch: input.branch || external.default_branch || "main",
       access_type: input.accessType || external.access_type || "public",
+      status: "active",
     });
   }
 
-  async get(projectId: string): Promise<{
+  async get(projectId: string, repositoryId?: string): Promise<{
     repository: RepositoryRecord | null;
+    repositories: RepositoryRecord[];
     latestAnalysis: RepositoryAnalysis | null;
     latestAttempt: RepositoryAnalysis | null;
     latestSuccessful: RepositoryAnalysis | null;
     activeAnalysis: RepositoryAnalysis | null;
   }> {
-    const repository = await repositoryIntelligenceRepository.repository(projectId);
+    const repositories = await repositoryIntelligenceRepository.repositories(projectId);
+    const repository = repositoryId
+      ? await repositoryIntelligenceRepository.repository(projectId, repositoryId)
+      : (repositories[0] || await repositoryIntelligenceRepository.repository(projectId));
+
     if (!repository) {
-      return { repository: null, latestAnalysis: null, latestAttempt: null, latestSuccessful: null, activeAnalysis: null };
+      return { repository: null, repositories, latestAnalysis: null, latestAttempt: null, latestSuccessful: null, activeAnalysis: null };
     }
-    const latestAttempt = await repositoryIntelligenceRepository.latestAttempt(projectId);
-    const latestSuccessful = await repositoryIntelligenceRepository.latestSuccessful(projectId);
+    const latestAttempt = await repositoryIntelligenceRepository.latestAttempt(projectId, repository.id);
+    const latestSuccessful = await repositoryIntelligenceRepository.latestSuccessful(projectId, repository.id);
     const latestAnalysis = latestSuccessful || latestAttempt;
-    const activeAnalysis = await repositoryIntelligenceRepository.activeAnalysis(projectId);
-    return { repository, latestAnalysis, latestAttempt, latestSuccessful, activeAnalysis };
+    const activeAnalysis = await repositoryIntelligenceRepository.activeAnalysis(projectId, repository.id);
+    return { repository, repositories, latestAnalysis, latestAttempt, latestSuccessful, activeAnalysis };
   }
 
-  async disconnect(projectId: string): Promise<void> {
-    return repositoryIntelligenceRepository.disconnect(projectId);
+  async list(projectId: string): Promise<Array<{
+    repository: RepositoryRecord;
+    latestAnalysis: RepositoryAnalysis | null;
+    latestAttempt: RepositoryAnalysis | null;
+    latestSuccessful: RepositoryAnalysis | null;
+    activeAnalysis: RepositoryAnalysis | null;
+  }>> {
+    const repositories = await repositoryIntelligenceRepository.repositories(projectId);
+    return Promise.all(
+      repositories.map(async (repo) => {
+        const latestAttempt = await repositoryIntelligenceRepository.latestAttempt(projectId, repo.id);
+        const latestSuccessful = await repositoryIntelligenceRepository.latestSuccessful(projectId, repo.id);
+        const latestAnalysis = latestSuccessful || latestAttempt;
+        const activeAnalysis = await repositoryIntelligenceRepository.activeAnalysis(projectId, repo.id);
+        return {
+          repository: repo,
+          latestAnalysis,
+          latestAttempt,
+          latestSuccessful,
+          activeAnalysis,
+        };
+      })
+    );
   }
 
-  async analyses(projectId: string): Promise<RepositoryAnalysis[]> {
-    return repositoryIntelligenceRepository.analyses(projectId);
+  async disconnect(projectId: string, repositoryId?: string): Promise<void> {
+    return repositoryIntelligenceRepository.disconnect(projectId, repositoryId);
   }
 
-  async latestAnalysis(projectId: string): Promise<RepositoryAnalysis | null> {
-    return repositoryIntelligenceRepository.latestAnalysis(projectId);
+  async analyses(projectId: string, repositoryId?: string): Promise<RepositoryAnalysis[]> {
+    return repositoryIntelligenceRepository.analyses(projectId, repositoryId);
+  }
+
+  async latestAnalysis(projectId: string, repositoryId?: string): Promise<RepositoryAnalysis | null> {
+    return repositoryIntelligenceRepository.latestAnalysis(projectId, repositoryId);
   }
 
   async analysis(analysisId: string): Promise<RepositoryAnalysis | null> {
     return repositoryIntelligenceRepository.analysis(analysisId);
   }
 
-  async enqueueAnalysis(projectId: string, userId: string, branch?: string): Promise<RepositoryAnalysis> {
-    const repository = await repositoryIntelligenceRepository.repository(projectId);
+  async enqueueAnalysis(projectId: string, userId: string, branch?: string, repositoryId?: string): Promise<RepositoryAnalysis> {
+    const repository = await repositoryIntelligenceRepository.repository(projectId, repositoryId);
     if (!repository) throw new NotFoundError("No repository connected for this project");
 
     void userId;
 
-    // Check if an analysis is already queued or running to prevent duplicate concurrent work
-    const active = await repositoryIntelligenceRepository.activeAnalysis(projectId);
+    // Check if an analysis is already queued or running to prevent duplicate concurrent work for this repository
+    const active = await repositoryIntelligenceRepository.activeAnalysis(projectId, repository.id);
     if (active) {
       return active;
     }
 
     if (branch && branch !== repository.default_branch) {
       // Update branch if specified
-      await repositoryIntelligenceRepository.connect({
-        ...repository,
+      await repositoryIntelligenceRepository.updateRepository(repository.id, {
         default_branch: branch,
       }).catch(() => undefined);
     }
@@ -120,28 +164,33 @@ export class RepositoryIntelligenceService {
     });
   }
 
-  async analyze(projectId: string, userId: string, existingAnalysisId?: string): Promise<RepositoryAnalysis> {
+  async analyze(projectId: string, userId: string, existingAnalysisId?: string, repositoryId?: string): Promise<RepositoryAnalysis> {
     void userId;
-    const repository = await repositoryIntelligenceRepository.repository(projectId);
+    let analysis = existingAnalysisId
+      ? await repositoryIntelligenceRepository.analysis(existingAnalysisId)
+      : null;
+
+    const targetRepoId = analysis?.repository_id || repositoryId;
+    const repository = await repositoryIntelligenceRepository.repository(projectId, targetRepoId);
     if (!repository) throw new NotFoundError("Repository is not connected");
 
     const provider = this.providers[repository.provider];
     if (!provider) throw new NotFoundError(`Repository provider '${repository.provider}' is not supported`);
 
-    const analysis = existingAnalysisId
-      ? await repositoryIntelligenceRepository.analysis(existingAnalysisId)
-      : await repositoryIntelligenceRepository.createAnalysis({
-          repository_id: repository.id,
-          project_id: projectId,
-          status: "queued",
-          frameworks: [],
-          languages: {},
-          dependencies: [],
-          infrastructure: {},
-          architecture: {},
-          metrics: {},
-          analysis_data: {},
-        });
+    if (!analysis) {
+      analysis = await repositoryIntelligenceRepository.createAnalysis({
+        repository_id: repository.id,
+        project_id: projectId,
+        status: "queued",
+        frameworks: [],
+        languages: {},
+        dependencies: [],
+        infrastructure: {},
+        architecture: {},
+        metrics: {},
+        analysis_data: {},
+      });
+    }
 
     if (!analysis) throw new NotFoundError("Repository analysis record not found");
 
@@ -151,7 +200,10 @@ export class RepositoryIntelligenceService {
         started_at: new Date().toISOString(),
       });
 
-      const snapshot = await provider.fetchSnapshot(repository);
+      const targetBranch = (analysis.analysis_data?.branch as string) || repository.default_branch;
+      const repoToFetch = { ...repository, default_branch: targetBranch };
+
+      const snapshot = await provider.fetchSnapshot(repoToFetch);
       const result = this.analyzer.analyze(snapshot);
 
       const rawDependencies = result.dependencies.map((dependency) => ({
@@ -217,7 +269,7 @@ export class RepositoryIntelligenceService {
     }
   }
 
-  async dependencies(projectId: string, filters: { type?: string; risk?: string; ecosystem?: string }) {
+  async dependencies(projectId: string, filters: { type?: string; risk?: string; ecosystem?: string; repositoryId?: string }) {
     return repositoryIntelligenceRepository.dependencies(projectId, filters);
   }
 }

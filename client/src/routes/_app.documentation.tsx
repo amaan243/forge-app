@@ -18,8 +18,11 @@ import {
   Zap,
   Activity,
   FlaskConical,
+  FolderOpen,
 } from "lucide-react";
 import { useState } from "react";
+import { useWorkspace } from "@/lib/workspace-context";
+import { ProjectSwitcher } from "@/components/project-switcher";
 
 export const Route = createFileRoute("/_app/documentation")({
   head: () => ({
@@ -72,10 +75,27 @@ router.get("/v1/users/:id", authMiddleware, async (req, res) => {
 export default router;`;
 
 function DocumentationPage() {
+  const { currentProject } = useWorkspace();
   const [active, setActive] = useState("arch");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [q, setQ] = useState("");
   const [copied, setCopied] = useState(false);
+
+  if (!currentProject) {
+    return (
+      <div className="p-6 lg:p-8 space-y-4">
+        <h1 className="text-2xl font-display font-semibold tracking-tight">Documentation</h1>
+        <div className="surface-panel p-8 text-center space-y-3">
+          <FolderOpen className="h-8 w-8 text-muted-foreground mx-auto" />
+          <h2 className="text-lg font-medium">No Project Selected</h2>
+          <p className="text-sm text-muted-foreground">Select an active workspace project to view documentation.</p>
+          <div className="pt-2 flex justify-center">
+            <ProjectSwitcher variant="inline" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-[260px_minmax(0,1fr)_220px] min-h-[calc(100vh-3rem)]">
@@ -126,7 +146,8 @@ function DocumentationPage() {
           <div className="text-[11px] font-mono text-muted-foreground flex items-center gap-1.5">
             <FileText className="h-3.5 w-3.5" /> services / user-service.md
           </div>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-2">
+            <ProjectSwitcher variant="toolbar" />
             <IconGhost title="Bookmark"><Bookmark className="h-3.5 w-3.5" /></IconGhost>
             <IconGhost title="Export Markdown"><Download className="h-3.5 w-3.5" /></IconGhost>
             <button className="h-7 px-2 rounded border border-border bg-surface hover:bg-surface/80 text-[11px] font-mono flex items-center gap-1.5">

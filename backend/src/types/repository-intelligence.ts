@@ -24,6 +24,7 @@ export interface RepositoryRecord {
   access_type: RepositoryAccessType;
   external_repository_id: string;
   credential_reference?: string;
+  status?: "active" | "disconnected";
   connected_by: string;
   created_at: string;
   updated_at: string;
