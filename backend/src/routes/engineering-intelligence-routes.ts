@@ -16,6 +16,7 @@ engineeringRoutes.post("/playground/:simulationId/apply", requireProjectEditor, 
 engineeringRoutes.post("/playground/:simulationId/discard", requireProjectEditor, engineeringController.discard);
 engineeringRoutes.post("/playground/:simulationId/alternative", requireProjectEditor, engineeringController.alternative);
 engineeringRoutes.get("/documentation", requireProjectMember, engineeringController.documents);
+engineeringRoutes.get("/documentation/staleness", requireProjectMember, engineeringController.staleness);
 engineeringRoutes.post("/documentation/generate", requireProjectEditor, engineeringController.generateDocument);
 engineeringRoutes.get("/documentation/:documentId", requireProjectMember, engineeringController.getDocument);
 engineeringRoutes.patch("/documentation/:documentId", requireProjectEditor, engineeringController.updateDocument);

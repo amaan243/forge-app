@@ -92,14 +92,14 @@ describe("Global Project Management, Multi-Repository, and Project-Scoped Drift"
         edges: [],
       });
 
-      const analysis: RepositoryAnalysis = {
+      const analysis = {
         id: "snap-1",
         project_id: projectIdB,
         repository_id: repoIdB1,
         commit_sha: "sha1",
         status: "completed",
         created_at: new Date().toISOString(),
-      };
+      } as unknown as RepositoryAnalysis;
 
       // Calling compare with projectIdB but version belongs to projectIdA
       await expect(
@@ -121,14 +121,14 @@ describe("Global Project Management, Multi-Repository, and Project-Scoped Drift"
       });
 
       // Snapshot has project_id = projectIdB, requested project is projectIdA
-      const crossProjectAnalysis: RepositoryAnalysis = {
+      const crossProjectAnalysis = {
         id: "snap-cross",
         project_id: projectIdB,
         repository_id: repoIdB1,
         commit_sha: "sha2",
         status: "completed",
         created_at: new Date().toISOString(),
-      };
+      } as unknown as RepositoryAnalysis;
 
       await expect(
         driftDetectionService.compare(projectIdA, versionIdA, crossProjectAnalysis)
@@ -148,14 +148,14 @@ describe("Global Project Management, Multi-Repository, and Project-Scoped Drift"
         edges: [],
       });
 
-      const incompleteSnapshot: RepositoryAnalysis = {
+      const incompleteSnapshot = {
         id: "snap-running",
         project_id: projectIdA,
         repository_id: repoIdA1,
         commit_sha: "sha3",
         status: "running" as any,
         created_at: new Date().toISOString(),
-      };
+      } as unknown as RepositoryAnalysis;
 
       await expect(
         driftDetectionService.compare(projectIdA, versionIdA, incompleteSnapshot)
@@ -195,7 +195,7 @@ describe("Global Project Management, Multi-Repository, and Project-Scoped Drift"
         edges: [],
       });
 
-      const emptyAnalysis: RepositoryAnalysis = {
+      const emptyAnalysis = {
         id: "snap-empty",
         project_id: projectIdA,
         repository_id: repoIdA1,
@@ -212,7 +212,7 @@ describe("Global Project Management, Multi-Repository, and Project-Scoped Drift"
           routes: [{ path: "/orders", method: "GET", file: "src/orders.ts" }],
         },
         created_at: new Date().toISOString(),
-      };
+      } as unknown as RepositoryAnalysis;
 
       const result = await driftDetectionService.compare(projectIdA, versionIdA, emptyAnalysis);
 
@@ -250,7 +250,7 @@ describe("Global Project Management, Multi-Repository, and Project-Scoped Drift"
         edges: [],
       });
 
-      const matchingAnalysis: RepositoryAnalysis = {
+      const matchingAnalysis = {
         id: "snap-matching",
         project_id: projectIdA,
         repository_id: repoIdA1,
@@ -267,7 +267,7 @@ describe("Global Project Management, Multi-Repository, and Project-Scoped Drift"
           routes: [{ path: "/orders", method: "POST", file: "src/orders.ts" }],
         },
         created_at: new Date().toISOString(),
-      };
+      } as unknown as RepositoryAnalysis;
 
       const result = await driftDetectionService.compare(projectIdA, versionIdA, matchingAnalysis);
 

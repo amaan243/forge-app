@@ -103,3 +103,40 @@ export {
   type RunDriftInput,
 } from "./repository";
 
+export {
+  createSimulation,
+  getSimulations,
+  getSimulation,
+  updateSimulation,
+  runSimulation,
+  applySimulation,
+  discardSimulation,
+  createAlternativeSimulation,
+  type PlaygroundSimulation,
+  type PlaygroundStatus,
+  type SimulationChange,
+  type SimulationChangeType,
+  type SimulationMetricsRecord,
+  type MetricValue,
+  type ImpactAnalysis as PlaygroundImpactAnalysis,
+  type BrokenConnection,
+  type CreateSimulationInput,
+} from "./playground";
+
+export {
+  getDocumentations,
+  getDocumentationStaleness,
+  getDocumentation,
+  generateDocumentation,
+  updateDocumentation,
+  deleteDocumentation,
+  regenerateDocumentation,
+  type DocumentationDocument,
+  type DocumentationType,
+  type DocumentationFormat,
+  type DocumentationStalenessItem,
+  type GenerateDocumentationInput,
+  type UpdateDocumentationInput,
+  type RegenerateDocumentationInput,
+} from "./documentation";
+
