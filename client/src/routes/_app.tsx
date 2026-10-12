@@ -60,6 +60,7 @@ type NavItem = {
     | "/drift"
     | "/dependencies"
     | "/playground"
+    | "/impact"
     | "/timeline"
     | "/snapshots"
     | "/story";
@@ -80,6 +81,7 @@ const NAV: NavItem[] = [
 ];
 
 const INTEL_NAV: NavItem[] = [
+  { to: "/impact", label: "Impact Analysis", icon: ShieldAlert },
   { to: "/playground", label: "Playground", icon: FlaskConical },
   { to: "/versions", label: "Versions", icon: History },
   { to: "/compare", label: "Compare", icon: GitCompare },

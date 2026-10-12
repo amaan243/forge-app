@@ -140,3 +140,25 @@ export {
   type RegenerateDocumentationInput,
 } from "./documentation";
 
+export {
+  analyzeImpact,
+  getImpactReports,
+  getImpactReport,
+  deleteImpactReport,
+  convertImpactToSimulation,
+  type ImpactReport,
+  type ImpactAnalysisInput,
+  type ImpactTargetEntity,
+  type ImpactTargetEntityType,
+  type ProposedChange,
+  type ProposedChangeType,
+  type ArchitectureCodeMapping,
+  type ArchitectureCodeMappingState,
+  type ImpactedEntityFinding,
+  type RiskSeverity,
+  type RiskFinding,
+  type ChangePlan,
+  type ChangePlanTask,
+  type DriftCorrelationFinding,
+  type PlaygroundSimulationBridge,
+} from "./impact";

@@ -2,7 +2,7 @@ import { Router } from "express";
 
 const authResponses = { "200": { description: "Successful response" }, "400": { description: "Validation error" }, "401": { description: "Unauthorized" }, "403": { description: "Forbidden" }, "404": { description: "Not found" } };
 const projectPath = { name: "projectId", in: "path", required: true, schema: { type: "string", format: "uuid" } };
-const projectOperations = ["architecture", "repository", "dependencies", "drift", "playground", "documentation", "analytics", "exports", "timeline", "insights", "story"];
+const projectOperations = ["architecture", "repository", "dependencies", "drift", "playground", "documentation", "analytics", "exports", "timeline", "insights", "story", "impact"];
 const paths: Record<string, unknown> = {
   "/auth/register": { post: { summary: "Register new user", responses: authResponses } },
   "/auth/login": { post: { summary: "Sign in with password", responses: authResponses } },

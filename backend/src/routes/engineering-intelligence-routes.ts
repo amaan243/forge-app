@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { requireProjectAdmin, requireProjectEditor, requireProjectMember } from "../middleware/project-auth.js";
 import { engineeringController } from "../controllers/engineering-intelligence-controller.js";
+import { engineeringImpactController } from "../controllers/engineering-impact-controller.js";
 import rateLimit from "express-rate-limit";
 import { env } from "../config/env.js";
 export const engineeringRoutes = Router({ mergeParams: true });
@@ -26,3 +27,10 @@ engineeringRoutes.post("/design-review", aiLimit, requireProjectMember, engineer
 engineeringRoutes.post("/story/generate", aiLimit, requireProjectEditor, engineeringController.generateStory);
 engineeringRoutes.get("/story", requireProjectMember, engineeringController.story);
 engineeringRoutes.get("/insights", requireProjectMember, engineeringController.insights);
+
+// Engineering Impact Analysis Integration Routes
+engineeringRoutes.post("/impact/analyze", requireProjectEditor, engineeringImpactController.analyze);
+engineeringRoutes.get("/impact/reports", requireProjectMember, engineeringImpactController.listReports);
+engineeringRoutes.get("/impact/reports/:reportId", requireProjectMember, engineeringImpactController.getReport);
+engineeringRoutes.delete("/impact/reports/:reportId", requireProjectAdmin, engineeringImpactController.deleteReport);
+engineeringRoutes.post("/impact/reports/:reportId/to-simulation", requireProjectEditor, engineeringImpactController.convertToSimulation);
