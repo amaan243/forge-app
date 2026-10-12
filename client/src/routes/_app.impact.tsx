@@ -36,8 +36,12 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import {
   getArchitectureVersions,
+  getArchitectureVersion,
+  getArchitecture,
   type ArchitectureVersion,
+  type ArchitectureGraph,
   type ArchitectureNode,
+  type ArchitectureEdge,
 } from "@/api/architecture";
 import {
   getRepositoryStatus,
@@ -130,6 +134,8 @@ function ImpactPage() {
   // Hierarchy Selectors State
   const [versions, setVersions] = useState<ArchitectureVersion[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string>("");
+  const [baselineGraph, setBaselineGraph] = useState<ArchitectureGraph | null>(null);
+  const [loadingGraph, setLoadingGraph] = useState<boolean>(false);
   const [repositories, setRepositories] = useState<RepositoryRecord[]>([]);
   const [selectedRepoId, setSelectedRepoId] = useState<string>("");
   const [snapshots, setSnapshots] = useState<RepositoryAnalysis[]>([]);
@@ -158,6 +164,7 @@ function ImpactPage() {
   useEffect(() => {
     setVersions([]);
     setSelectedVersionId("");
+    setBaselineGraph(null);
     setRepositories([]);
     setSelectedRepoId("");
     setSnapshots([]);
@@ -221,6 +228,50 @@ function ImpactPage() {
     };
   }, [currentProject?.id]);
 
+  // Fetch baseline graph nodes & edges whenever selected version changes
+  useEffect(() => {
+    if (!currentProject?.id) {
+      setBaselineGraph(null);
+      return;
+    }
+
+    let isCurrent = true;
+    setLoadingGraph(true);
+
+    async function fetchBaselineGraph() {
+      try {
+        let graph: ArchitectureGraph | null = null;
+        if (selectedVersionId) {
+          graph = await getArchitectureVersion(currentProject!.id, selectedVersionId).catch(() => null);
+        }
+        if (!graph || !graph.nodes || graph.nodes.length === 0) {
+          // Fallback to active architecture
+          const fallback = await getArchitecture(currentProject!.id).catch(() => null);
+          if (fallback && fallback.nodes && fallback.nodes.length > 0) {
+            graph = fallback;
+          }
+        }
+        if (isCurrent && graph) {
+          setBaselineGraph(graph);
+          if (!selectedVersionId && graph.version?.id) {
+            setSelectedVersionId(graph.version.id);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load baseline architecture graph", err);
+        if (isCurrent) setBaselineGraph(null);
+      } finally {
+        if (isCurrent) setLoadingGraph(false);
+      }
+    }
+
+    fetchBaselineGraph();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [currentProject?.id, selectedVersionId]);
+
   // Handle repository selection change
   const handleRepoChange = async (repoId: string) => {
     setSelectedRepoId(repoId);
@@ -242,8 +293,8 @@ function ImpactPage() {
 
   // Derive active version and nodes for target selection
   const activeVersion = useMemo(() => {
-    return versions.find((v) => v.id === selectedVersionId);
-  }, [versions, selectedVersionId]);
+    return versions.find((v) => v.id === selectedVersionId) || baselineGraph?.version || null;
+  }, [versions, selectedVersionId, baselineGraph]);
 
   const activeSnapshot = useMemo(() => {
     return snapshots.find((s) => s.id === selectedSnapshotId);
@@ -251,9 +302,9 @@ function ImpactPage() {
 
   // Extract available targets based on targetType
   const availableTargets = useMemo(() => {
-    if (!activeVersion) return [];
+    const nodes = (baselineGraph?.nodes as ArchitectureNode[]) || [];
+    const edges = (baselineGraph?.edges as ArchitectureEdge[]) || [];
 
-    const nodes = (activeVersion.architecture_data?.nodes as ArchitectureNode[]) || [];
     const archRoutes = ((activeSnapshot?.architecture as any)?.routes || []) as Array<{
       method: string;
       path: string;
@@ -261,10 +312,29 @@ function ImpactPage() {
     }>;
     const archDatabases = ((activeSnapshot?.architecture as any)?.databases || []) as string[];
     const archIntegrations = ((activeSnapshot?.architecture as any)?.externalIntegrations || []) as string[];
+    const archServices = ((activeSnapshot?.architecture as any)?.services || []) as string[];
 
     switch (targetType) {
       case "architecture_component":
-        return nodes.map((n) => ({ id: n.id, name: n.name, subtext: `${n.type} • ${n.technology || "No tech"}` }));
+        if (nodes.length > 0) {
+          return nodes.map((n) => ({
+            id: n.id,
+            name: n.name,
+            subtext: `${n.type} • ${n.technology || "Component"}`,
+          }));
+        }
+        if (archServices.length > 0) {
+          return archServices.map((s) => ({
+            id: s,
+            name: s.split("/").pop() || s,
+            subtext: "Repository Detected Service",
+          }));
+        }
+        return [
+          { id: "api_gateway", name: "API Gateway", subtext: "Core Gateway Component" },
+          { id: "auth_service", name: "Auth Service", subtext: "Authentication Subsystem" },
+          { id: "user_service", name: "User Service", subtext: "Domain Service" },
+        ];
 
       case "api_route":
         if (archRoutes.length > 0) {
@@ -291,33 +361,58 @@ function ImpactPage() {
         return [{ id: "db_primary", name: "Primary Database", subtext: "Default Relational Store" }];
 
       case "external_integration":
+        const extNodes = nodes.filter((n) => ["external_service", "auth", "monitoring"].includes(n.type));
+        if (extNodes.length > 0) {
+          return extNodes.map((n) => ({ id: n.id, name: n.name, subtext: `${n.technology || "External SaaS"}` }));
+        }
         if (archIntegrations.length > 0) {
           return archIntegrations.map((i) => ({ id: i, name: i, subtext: "External SaaS Integration" }));
         }
         return [
           { id: "integ_stripe", name: "Stripe API", subtext: "Payment Gateway Integration" },
           { id: "integ_sendgrid", name: "SendGrid Email", subtext: "Transactional Mailer" },
+          { id: "integ_auth", name: "OAuth Provider", subtext: "External Auth Provider" },
         ];
 
       case "service_module":
-        const services = ((activeSnapshot?.architecture as any)?.services || []) as string[];
-        if (services.length > 0) {
-          return services.map((s) => ({ id: s, name: s.split("/").pop() || s, subtext: s }));
+        if (archServices.length > 0) {
+          return archServices.map((s) => ({ id: s, name: s.split("/").pop() || s, subtext: s }));
         }
-        return nodes.map((n) => ({ id: n.id, name: n.name, subtext: "Architecture Service Module" }));
+        if (nodes.length > 0) {
+          return nodes.map((n) => ({ id: n.id, name: n.name, subtext: "Architecture Service Module" }));
+        }
+        return [{ id: "mod_core", name: "Core Application Module", subtext: "Root Service Module" }];
 
       case "architecture_connection":
-        const edges = (activeVersion.architecture_data?.edges as any[]) || [];
-        return edges.map((e) => {
-          const src = nodes.find((n) => n.id === e.source_node_id)?.name || e.source_node_id;
-          const tgt = nodes.find((n) => n.id === e.target_node_id)?.name || e.target_node_id;
-          return { id: e.id, name: `${src} -> ${tgt}`, subtext: e.relationship || "calls" };
-        });
+        if (edges.length > 0) {
+          return edges.map((e) => {
+            const src = nodes.find((n) => n.id === e.source_node_id)?.name || e.source_node_id;
+            const tgt = nodes.find((n) => n.id === e.target_node_id)?.name || e.target_node_id;
+            return {
+              id: e.id,
+              name: `${src} → ${tgt}`,
+              subtext: `${e.relationship || "calls"}${e.protocol ? ` (${e.protocol})` : ""}`,
+            };
+          });
+        }
+        if (nodes.length >= 2) {
+          return [
+            {
+              id: `${nodes[0].id}_to_${nodes[1].id}`,
+              name: `${nodes[0].name} → ${nodes[1].name}`,
+              subtext: "Architecture Relationship",
+            },
+          ];
+        }
+        return [{ id: "conn_api_db", name: "API Gateway → Primary Database", subtext: "Direct Query Connection" }];
 
       default:
-        return nodes.map((n) => ({ id: n.id, name: n.name, subtext: n.type }));
+        if (nodes.length > 0) {
+          return nodes.map((n) => ({ id: n.id, name: n.name, subtext: n.type }));
+        }
+        return [{ id: "target_default", name: "Default Target Component", subtext: "Architecture Component" }];
     }
-  }, [activeVersion, activeSnapshot, targetType]);
+  }, [baselineGraph, activeSnapshot, targetType]);
 
   // Set default target when available targets change
   useEffect(() => {
@@ -549,17 +644,33 @@ ${plan.rollbackConsiderations.map((r) => `- ${r}`).join("\n")}
             onChange={(e) => setSelectedVersionId(e.target.value)}
             className="w-full bg-background border border-border rounded px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary"
           >
-            {versions.map((v) => (
-              <option key={v.id} value={v.id}>
-                v{v.version_number}: {v.name} ({v.status})
+            {versions.length === 0 && baselineGraph?.version ? (
+              <option value={baselineGraph.version.id}>
+                v{baselineGraph.version.version_number}: {baselineGraph.version.name} ({baselineGraph.version.status})
               </option>
-            ))}
+            ) : versions.length === 0 ? (
+              <option value="">No architecture versions found</option>
+            ) : (
+              versions.map((v) => (
+                <option key={v.id} value={v.id}>
+                  v{v.version_number}: {v.name} ({v.status})
+                </option>
+              ))
+            )}
           </select>
-          {activeVersion && (
+          {(activeVersion || baselineGraph) && (
             <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-2">
-              <span>{activeVersion.architecture_data?.nodes?.length || 0} components</span>
-              <span>•</span>
-              <span>{activeVersion.architecture_data?.edges?.length || 0} connections</span>
+              {loadingGraph ? (
+                <span className="flex items-center gap-1 text-primary">
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" /> Loading topology...
+                </span>
+              ) : (
+                <>
+                  <span>{(baselineGraph?.nodes || []).length} components</span>
+                  <span>•</span>
+                  <span>{(baselineGraph?.edges || []).length} connections</span>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -682,7 +793,12 @@ ${plan.rollbackConsiderations.map((r) => `- ${r}`).join("\n")}
               <label className="text-[10px] font-mono uppercase text-muted-foreground">Target Entity Type</label>
               <select
                 value={targetType}
-                onChange={(e) => setTargetType(e.target.value as ImpactTargetEntityType)}
+                onChange={(e) => {
+                  const newType = e.target.value as ImpactTargetEntityType;
+                  setTargetType(newType);
+                  setTargetId("");
+                  setTargetName("");
+                }}
                 className="w-full bg-background border border-border rounded px-2.5 py-1.5 text-xs font-mono"
               >
                 <option value="architecture_component">Architecture Component</option>
@@ -704,13 +820,20 @@ ${plan.rollbackConsiderations.map((r) => `- ${r}`).join("\n")}
                   setTargetId(e.target.value);
                   if (sel) setTargetName(sel.name);
                 }}
+                disabled={loadingGraph}
                 className="w-full bg-background border border-border rounded px-2.5 py-1.5 text-xs font-mono"
               >
-                {availableTargets.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.subtext})
-                  </option>
-                ))}
+                {loadingGraph ? (
+                  <option value="">Loading architecture components...</option>
+                ) : availableTargets.length === 0 ? (
+                  <option value="">No targets available</option>
+                ) : (
+                  availableTargets.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.subtext})
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
