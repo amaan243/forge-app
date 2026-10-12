@@ -45,7 +45,7 @@ vi.mock("../src/lib/supabase.js", () => ({
 }));
 
 import { EngineeringImpactService } from "../src/services/engineering-impact-service.js";
-import { NotFoundError, AppError } from "../src/errors/app-error.js";
+import { NotFoundError } from "../src/errors/app-error.js";
 
 const sampleNodes: ArchitectureNode[] = [
   {
@@ -205,9 +205,9 @@ const sampleAnalysis: RepositoryAnalysis = {
     databases: ["PostgreSQL 16"],
     externalIntegrations: ["Stripe API"],
     routes: [
-      { method: "POST", path: "/api/v1/auth/login", file: "src/routes/auth.ts", line: 25, handler: "loginHandler" },
-      { method: "GET", path: "/api/v1/auth/me", file: "src/routes/auth.ts", line: 45, handler: "meHandler" },
-      { method: "POST", path: "/api/v1/orders", file: "src/routes/orders.py", line: 12, handler: "createOrder" },
+      { method: "POST", path: "/api/v1/auth/login", file: "src/routes/auth.ts", line: 25, handler: "loginHandler", framework: "Express", confidence: "high", detectionBasis: "direct_app_route" },
+      { method: "GET", path: "/api/v1/auth/me", file: "src/routes/auth.ts", line: 45, handler: "meHandler", framework: "Express", confidence: "high", detectionBasis: "direct_app_route" },
+      { method: "POST", path: "/api/v1/orders", file: "src/routes/orders.py", line: 12, handler: "createOrder", framework: "FastAPI", confidence: "high", detectionBasis: "decorator" },
     ],
     entryPoints: [
       { path: "src/server.ts", kind: "backend_server", evidence: "Express bootstrap", confidence: "confirmed" },
@@ -220,6 +220,8 @@ const sampleAnalysis: RepositoryAnalysis = {
     branch: "main",
   },
   created_at: "2026-01-02T00:00:00Z",
+  started_at: "2026-01-02T00:00:00Z",
+  completed_at: "2026-01-02T00:01:00Z",
 };
 
 describe("Engineering Impact Analysis Integration", () => {

@@ -198,9 +198,10 @@ function ImpactPage() {
           setSelectedVersionId(published.id);
         }
 
-        if (statusRes?.connected && statusRes.repositories?.length) {
-          setRepositories(statusRes.repositories);
-          const firstRepo = statusRes.repositories[0];
+        const repos = statusRes?.repositories?.length ? statusRes.repositories : statusRes?.repository ? [statusRes.repository] : [];
+        if (repos.length > 0) {
+          setRepositories(repos);
+          const firstRepo = repos[0];
           setSelectedRepoId(firstRepo.id);
 
           const snps = await getRepositoryAnalyses(currentProject!.id, firstRepo.id).catch(() => []);

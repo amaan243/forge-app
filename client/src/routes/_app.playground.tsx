@@ -1362,7 +1362,7 @@ function PlaygroundPage() {
                   mainValue={metrics.performance.latencyScore.proposed}
                   delta={metrics.performance.latencyScore.delta}
                   status={metrics.performance.latencyScore.status}
-                  subNote={`Sync call chain: ${metrics.performance.maxSyncHops.proposed} hops (${metrics.performance.maxSyncHops.delta > 0 ? "+" : ""}${metrics.performance.maxSyncHops.delta})`}
+                  subNote={`Sync call chain: ${metrics.performance.maxSyncHops.proposed} hops (${Number(metrics.performance.maxSyncHops.delta || 0) > 0 ? "+" : ""}${metrics.performance.maxSyncHops.delta ?? 0})`}
                   onInspect={() =>
                     setInspectMetric({
                       title: "Performance & Latency Breakdown",
@@ -1382,7 +1382,7 @@ function PlaygroundPage() {
                   icon={Server}
                   title="Scalability & SPOFs"
                   mainValue={`${metrics.scalability.spofCount.proposed} Single Point(s) of Failure`}
-                  delta={`${metrics.scalability.spofCount.delta > 0 ? "+" : ""}${metrics.scalability.spofCount.delta}`}
+                  delta={`${Number(metrics.scalability.spofCount.delta || 0) > 0 ? "+" : ""}${metrics.scalability.spofCount.delta ?? 0}`}
                   status={metrics.scalability.spofCount.status}
                   subNote={`Identified bottlenecks: ${metrics.scalability.potentialBottlenecks.length}`}
                   onInspect={() =>
@@ -1403,7 +1403,7 @@ function PlaygroundPage() {
                   icon={DollarSign}
                   title="Relative Cost Index"
                   mainValue={`${metrics.cost.relativeCostIndex.proposed} compute units`}
-                  delta={`${metrics.cost.relativeCostIndex.delta > 0 ? "+" : ""}${metrics.cost.relativeCostIndex.delta}`}
+                  delta={`${Number(metrics.cost.relativeCostIndex.delta || 0) > 0 ? "+" : ""}${metrics.cost.relativeCostIndex.delta ?? 0}`}
                   status={metrics.cost.relativeCostIndex.status}
                   subNote={`${metrics.cost.introducedServices.length} infrastructure service(s) added`}
                   onInspect={() =>
@@ -1427,7 +1427,7 @@ function PlaygroundPage() {
                   mainValue={`${metrics.complexity.componentCount.proposed} components, ${metrics.complexity.connectionCount.proposed} edges`}
                   delta={`${metrics.complexity.couplingIndex.proposed} edges/node`}
                   status={metrics.complexity.couplingIndex.status}
-                  subNote={`Delta: ${metrics.complexity.componentCount.delta > 0 ? "+" : ""}${metrics.complexity.componentCount.delta} nodes, ${metrics.complexity.connectionCount.delta > 0 ? "+" : ""}${metrics.complexity.connectionCount.delta} edges`}
+                  subNote={`Delta: ${Number(metrics.complexity.componentCount.delta || 0) > 0 ? "+" : ""}${metrics.complexity.componentCount.delta ?? 0} nodes, ${Number(metrics.complexity.connectionCount.delta || 0) > 0 ? "+" : ""}${metrics.complexity.connectionCount.delta ?? 0} edges`}
                   onInspect={() =>
                     setInspectMetric({
                       title: "Coupling & Complexity Indicators",
@@ -1447,7 +1447,7 @@ function PlaygroundPage() {
                   icon={Shield}
                   title="Security & Attack Surfaces"
                   mainValue={`${metrics.security.attackSurfacesCount.proposed} Ingress Surface(s)`}
-                  delta={`${metrics.security.attackSurfacesCount.delta > 0 ? "+" : ""}${metrics.security.attackSurfacesCount.delta}`}
+                  delta={`${Number(metrics.security.attackSurfacesCount.delta || 0) > 0 ? "+" : ""}${metrics.security.attackSurfacesCount.delta ?? 0}`}
                   status={metrics.security.attackSurfacesCount.status}
                   subNote={metrics.security.evidenceNote || "Architecture metadata audit"}
                   onInspect={() =>
@@ -1873,7 +1873,7 @@ function PlaygroundPage() {
                 {inspectMetric.rationale}
               </p>
 
-              {inspectMetric.details && (
+              {Boolean(inspectMetric.details) && (
                 <div className="space-y-1 pt-1">
                   <div className="font-medium text-muted-foreground">Detailed Indicators:</div>
                   <pre className="p-2.5 rounded bg-background border border-border text-[10px] font-mono overflow-x-auto max-h-48 text-muted-foreground">

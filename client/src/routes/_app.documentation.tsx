@@ -1141,7 +1141,6 @@ function GenerateModal({
       const selectedRepo = repositories.find((r) => r.repository.id === selectedRepoId)?.repository;
       const branch =
         (selectedAnalysis?.analysis_data?.branch as string) ||
-        selectedAnalysis?.branch ||
         selectedRepo?.default_branch ||
         null;
 
@@ -1369,7 +1368,7 @@ function GenerateModal({
                           className="w-full h-8 px-2 rounded border border-border bg-background text-xs font-mono focus:outline-none focus:border-primary/50"
                         >
                           {analyses.map((a) => {
-                            const branch = (a.analysis_data?.branch as string) || a.branch || "main";
+                            const branch = (a.analysis_data?.branch as string) || "main";
                             const sha = a.commit_sha ? a.commit_sha.slice(0, 7) : "snapshot";
                             const date = a.completed_at || a.created_at ? new Date(a.completed_at || a.created_at).toLocaleDateString() : "";
                             return (
