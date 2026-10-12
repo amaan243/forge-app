@@ -19,6 +19,7 @@ import { Route as DesignSystemRouteImport } from './routes/design-system'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWorkspaceRouteImport } from './routes/_app.workspace'
+import { Route as AppWorkflowRouteImport } from './routes/_app.workflow'
 import { Route as AppVersionsRouteImport } from './routes/_app.versions'
 import { Route as AppTimelineRouteImport } from './routes/_app.timeline'
 import { Route as AppStoryRouteImport } from './routes/_app.story'
@@ -82,6 +83,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppWorkspaceRoute = AppWorkspaceRouteImport.update({
   id: '/workspace',
   path: '/workspace',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppWorkflowRoute = AppWorkflowRouteImport.update({
+  id: '/workflow',
+  path: '/workflow',
   getParentRoute: () => AppRoute,
 } as any)
 const AppVersionsRoute = AppVersionsRouteImport.update({
@@ -184,6 +190,7 @@ export interface FileRoutesByFullPath {
   '/story': typeof AppStoryRoute
   '/timeline': typeof AppTimelineRoute
   '/versions': typeof AppVersionsRoute
+  '/workflow': typeof AppWorkflowRoute
   '/workspace': typeof AppWorkspaceRoute
 }
 export interface FileRoutesByTo {
@@ -209,6 +216,7 @@ export interface FileRoutesByTo {
   '/story': typeof AppStoryRoute
   '/timeline': typeof AppTimelineRoute
   '/versions': typeof AppVersionsRoute
+  '/workflow': typeof AppWorkflowRoute
   '/workspace': typeof AppWorkspaceRoute
   '/': typeof AppIndexRoute
 }
@@ -237,6 +245,7 @@ export interface FileRoutesById {
   '/_app/story': typeof AppStoryRoute
   '/_app/timeline': typeof AppTimelineRoute
   '/_app/versions': typeof AppVersionsRoute
+  '/_app/workflow': typeof AppWorkflowRoute
   '/_app/workspace': typeof AppWorkspaceRoute
   '/_app/': typeof AppIndexRoute
 }
@@ -266,6 +275,7 @@ export interface FileRouteTypes {
     | '/story'
     | '/timeline'
     | '/versions'
+    | '/workflow'
     | '/workspace'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -291,6 +301,7 @@ export interface FileRouteTypes {
     | '/story'
     | '/timeline'
     | '/versions'
+    | '/workflow'
     | '/workspace'
     | '/'
   id:
@@ -318,6 +329,7 @@ export interface FileRouteTypes {
     | '/_app/story'
     | '/_app/timeline'
     | '/_app/versions'
+    | '/_app/workflow'
     | '/_app/workspace'
     | '/_app/'
   fileRoutesById: FileRoutesById
@@ -403,6 +415,13 @@ declare module '@tanstack/react-router' {
       path: '/workspace'
       fullPath: '/workspace'
       preLoaderRoute: typeof AppWorkspaceRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/workflow': {
+      id: '/_app/workflow'
+      path: '/workflow'
+      fullPath: '/workflow'
+      preLoaderRoute: typeof AppWorkflowRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/versions': {
@@ -529,6 +548,7 @@ interface AppRouteChildren {
   AppStoryRoute: typeof AppStoryRoute
   AppTimelineRoute: typeof AppTimelineRoute
   AppVersionsRoute: typeof AppVersionsRoute
+  AppWorkflowRoute: typeof AppWorkflowRoute
   AppWorkspaceRoute: typeof AppWorkspaceRoute
   AppIndexRoute: typeof AppIndexRoute
 }
@@ -549,6 +569,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppStoryRoute: AppStoryRoute,
   AppTimelineRoute: AppTimelineRoute,
   AppVersionsRoute: AppVersionsRoute,
+  AppWorkflowRoute: AppWorkflowRoute,
   AppWorkspaceRoute: AppWorkspaceRoute,
   AppIndexRoute: AppIndexRoute,
 }

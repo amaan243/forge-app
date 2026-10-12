@@ -40,6 +40,11 @@ export interface ArchitectureVersion {
   architecture_data: Record<string, unknown>;
   created_by: string;
   created_at: string;
+  node_count?: number;
+  edge_count?: number;
+  node_types?: Record<string, number>;
+  technologies?: string[];
+  sample_nodes?: { id: string; name: string; type: ArchitectureNodeType; technology?: string | null }[];
 }
 
 export interface ArchitectureNode {

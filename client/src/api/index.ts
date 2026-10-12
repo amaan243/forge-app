@@ -162,3 +162,27 @@ export {
   type DriftCorrelationFinding,
   type PlaygroundSimulationBridge,
 } from "./impact";
+
+export {
+  getWorkflowContext,
+  runWorkflow,
+  getWorkflowRuns,
+  getWorkflowRun,
+  retryWorkflowStage,
+  type WorkflowStageKey,
+  type WorkflowStageLetter,
+  type WorkflowStageStatus,
+  type ReadinessGateDecision,
+  type ReadinessCheckStatus,
+  type ReadinessCheckItem,
+  type ReadinessGateResult,
+  type WorkflowFinding,
+  type WorkflowRecommendedAction,
+  type WorkflowStageSourceVersion,
+  type WorkflowStageResult,
+  type WorkflowRunSummary,
+  type WorkflowSourceContext,
+  type WorkflowRun,
+  type WorkflowProjectContext,
+  type RunWorkflowInput,
+} from "./workflow";

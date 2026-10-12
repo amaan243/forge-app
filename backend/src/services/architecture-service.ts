@@ -11,8 +11,30 @@ export const architectureService = {
     return version ? this.hydrate(version) : { version: null, nodes: [], edges: [] };
   },
 
-  listVersions(projectId: string) {
-    return architectureRepository.versions(projectId);
+  async listVersions(projectId: string) {
+    const versions = await architectureRepository.versions(projectId);
+    return Promise.all(
+      versions.map(async (v) => {
+        const [nodes, edges] = await Promise.all([
+          architectureRepository.nodes(v.id).catch(() => []),
+          architectureRepository.edges(v.id).catch(() => []),
+        ]);
+        const nodeTypes: Record<string, number> = {};
+        const technologies = new Set<string>();
+        nodes.forEach((n) => {
+          nodeTypes[n.type] = (nodeTypes[n.type] || 0) + 1;
+          if (n.technology) technologies.add(n.technology);
+        });
+        return {
+          ...v,
+          node_count: nodes.length,
+          edge_count: edges.length,
+          node_types: nodeTypes,
+          technologies: Array.from(technologies),
+          sample_nodes: nodes.slice(0, 6).map((n) => ({ id: n.id, name: n.name, type: n.type, technology: n.technology })),
+        };
+      })
+    );
   },
 
   async getVersion(id: string) {
