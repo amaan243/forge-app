@@ -46,9 +46,10 @@ import {
   type DocumentationType,
   type DocumentationFormat,
   type DocumentationStalenessItem,
+  type DocumentationSourceMode,
 } from "@/api/documentation";
 import { getArchitectureVersions, type ArchitectureVersion } from "@/api/architecture";
-import { getRepositoryAnalyses, type RepositoryAnalysis } from "@/api/repository";
+import { getRepositoryAnalyses, getRepositories, type RepositoryAnalysis, type RepositorySummaryItem } from "@/api/repository";
 
 export const Route = createFileRoute("/_app/documentation")({
   head: () => ({
@@ -881,8 +882,8 @@ function DocumentationPage() {
       {showGenerateModal && (
         <GenerateModal
           projectId={currentProject.id}
+          projectName={currentProject.name}
           archVersions={archVersions}
-          repoAnalyses={repoAnalyses}
           onClose={() => setShowGenerateModal(false)}
           onGenerated={(newDoc) => {
             setDocuments((prev) => [newDoc, ...prev.filter((d) => d.id !== newDoc.id)]);
@@ -954,46 +955,205 @@ function DocumentationPage() {
   );
 }
 
+// Documentation Type Source Rules and Modes
+const DOC_TYPE_SOURCE_RULES: Record<
+  DocumentationType,
+  {
+    allowedModes: DocumentationSourceMode[];
+    defaultMode: DocumentationSourceMode;
+    description: string;
+  }
+> = {
+  architecture_overview: {
+    allowedModes: ["architecture", "combined"],
+    defaultMode: "architecture",
+    description: "Requires a saved architecture baseline. Repository code scan is optional in Combined mode.",
+  },
+  system_design: {
+    allowedModes: ["architecture", "combined"],
+    defaultMode: "architecture",
+    description: "Requires a saved architecture baseline. Repository code scan is optional in Combined mode.",
+  },
+  api_documentation: {
+    allowedModes: ["repository", "combined"],
+    defaultMode: "repository",
+    description: "Requires repository code analysis with detected routes. Architecture is optional in Combined mode.",
+  },
+  database_documentation: {
+    allowedModes: ["repository", "architecture", "combined"],
+    defaultMode: "repository",
+    description: "Uses actual database schema as primary source. Requires architecture when documenting intended design.",
+  },
+  deployment: {
+    allowedModes: ["repository", "combined"],
+    defaultMode: "repository",
+    description: "Requires repository files, Docker, K8s, and deployment configs. Architecture optional.",
+  },
+  security: {
+    allowedModes: ["repository", "combined"],
+    defaultMode: "repository",
+    description: "Requires repository security findings, auth, and test evidence. Architecture optional.",
+  },
+  repository_overview: {
+    allowedModes: ["repository"],
+    defaultMode: "repository",
+    description: "Requires a completed repository scan only. Architecture is decoupled.",
+  },
+  getting_started: {
+    allowedModes: ["repository"],
+    defaultMode: "repository",
+    description: "Requires repository source code and configuration evidence only.",
+  },
+  testing_security: {
+    allowedModes: ["repository", "combined"],
+    defaultMode: "repository",
+    description: "Requires repository test evidence and static security findings.",
+  },
+  custom: {
+    allowedModes: ["architecture", "repository", "combined"],
+    defaultMode: "combined",
+    description: "Custom documentation synthesizing selected baseline or repository sources.",
+  },
+};
+
 // Generate Documentation Modal Component
 function GenerateModal({
   projectId,
+  projectName,
   archVersions,
-  repoAnalyses,
   onClose,
   onGenerated,
 }: {
   projectId: string;
+  projectName: string;
   archVersions: ArchitectureVersion[];
-  repoAnalyses: RepositoryAnalysis[];
   onClose: () => void;
   onGenerated: (doc: DocumentationDocument) => void;
 }) {
   const [selectedType, setSelectedType] = useState<DocumentationType>("architecture_overview");
+  const [sourceMode, setSourceMode] = useState<DocumentationSourceMode>("architecture");
   const [title, setTitle] = useState("Architecture Overview Specification");
   const [format, setFormat] = useState<DocumentationFormat>("markdown");
   const [versionId, setVersionId] = useState<string>(archVersions[0]?.id || "");
-  const [analysisId, setAnalysisId] = useState<string>(repoAnalyses[0]?.id || "");
+  const [repositories, setRepositories] = useState<RepositorySummaryItem[]>([]);
+  const [selectedRepoId, setSelectedRepoId] = useState<string>("");
+  const [analyses, setAnalyses] = useState<RepositoryAnalysis[]>([]);
+  const [analysisId, setAnalysisId] = useState<string>("");
+  const [loadingRepos, setLoadingRepos] = useState<boolean>(false);
+  const [loadingAnalyses, setLoadingAnalyses] = useState<boolean>(false);
   const [customPrompt, setCustomPrompt] = useState("");
   const [forceOverwrite, setForceOverwrite] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Auto-update title when type changes
+  // Clear incompatible selections and fetch repositories when projectId changes
+  useEffect(() => {
+    let isMounted = true;
+    setVersionId(archVersions[0]?.id || "");
+    setSelectedRepoId("");
+    setAnalysisId("");
+    setAnalyses([]);
+
+    const loadRepos = async () => {
+      try {
+        setLoadingRepos(true);
+        const repoList = await getRepositories(projectId);
+        if (!isMounted) return;
+        setRepositories(repoList);
+        if (repoList.length > 0) {
+          const firstRepoId = repoList[0].repository.id;
+          setSelectedRepoId(firstRepoId);
+        }
+      } catch (err) {
+        if (isMounted) setRepositories([]);
+      } finally {
+        if (isMounted) setLoadingRepos(false);
+      }
+    };
+
+    loadRepos();
+    return () => {
+      isMounted = false;
+    };
+  }, [projectId, archVersions]);
+
+  // Load analyses when selectedRepoId changes
+  useEffect(() => {
+    let isMounted = true;
+    if (!selectedRepoId) {
+      setAnalyses([]);
+      setAnalysisId("");
+      return;
+    }
+
+    const loadAnalyses = async () => {
+      try {
+        setLoadingAnalyses(true);
+        const analysisList = await getRepositoryAnalyses(projectId, selectedRepoId);
+        if (!isMounted) return;
+        const completed = analysisList.filter((a) => a.status === "completed");
+        setAnalyses(completed);
+        if (completed.length > 0) {
+          setAnalysisId(completed[0].id);
+        } else {
+          setAnalysisId("");
+        }
+      } catch (err) {
+        if (isMounted) {
+          setAnalyses([]);
+          setAnalysisId("");
+        }
+      } finally {
+        if (isMounted) setLoadingAnalyses(false);
+      }
+    };
+
+    loadAnalyses();
+    return () => {
+      isMounted = false;
+    };
+  }, [projectId, selectedRepoId]);
+
+  // Auto-update title and reconcile mode when type changes
   const handleTypeSelect = (t: DocumentationType) => {
     setSelectedType(t);
     const label = getDocLabel(t);
     setTitle(`${label} Specification`);
+    const rules = DOC_TYPE_SOURCE_RULES[t];
+    if (!rules.allowedModes.includes(sourceMode)) {
+      setSourceMode(rules.defaultMode);
+    }
   };
+
+  const currentRules = DOC_TYPE_SOURCE_RULES[selectedType];
+  const requiresArch = sourceMode === "architecture" || sourceMode === "combined";
+  const requiresRepo = sourceMode === "repository" || sourceMode === "combined";
+
+  const hasValidArch = !requiresArch || (!!versionId && archVersions.some((v) => v.id === versionId));
+  const hasValidRepo = !requiresRepo || (!!analysisId && analyses.some((a) => a.id === analysisId));
+  const canGenerate = title.trim().length > 0 && hasValidArch && hasValidRepo && !submitting;
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canGenerate) return;
     try {
       setSubmitting(true);
+      const selectedAnalysis = analyses.find((a) => a.id === analysisId);
+      const selectedRepo = repositories.find((r) => r.repository.id === selectedRepoId)?.repository;
+      const branch =
+        (selectedAnalysis?.analysis_data?.branch as string) ||
+        selectedAnalysis?.branch ||
+        selectedRepo?.default_branch ||
+        null;
+
       const result = await generateDocumentation(projectId, {
         type: selectedType,
         title: title.trim(),
         format,
-        version_id: versionId || null,
-        repository_analysis_id: analysisId || null,
+        source_mode: sourceMode,
+        version_id: requiresArch ? versionId : null,
+        repository_id: requiresRepo ? selectedRepoId : null,
+        repository_analysis_id: requiresRepo ? analysisId : null,
+        snapshot_branch: requiresRepo ? branch : null,
         custom_prompt: customPrompt.trim() || undefined,
         force_overwrite: forceOverwrite,
       });
@@ -1021,6 +1181,18 @@ function GenerateModal({
 
         {/* Form Body */}
         <form onSubmit={handleGenerate} className="p-6 space-y-5 overflow-y-auto flex-1">
+          {/* Active Project Banner */}
+          <div className="flex items-center justify-between px-3 py-2 rounded bg-surface/50 border border-border text-xs">
+            <div className="flex items-center gap-2">
+              <FolderOpen className="h-3.5 w-3.5 text-primary" />
+              <span className="text-muted-foreground font-mono">Active Project:</span>
+              <span className="font-semibold text-foreground">{projectName}</span>
+            </div>
+            <span className="text-[11px] font-mono text-muted-foreground">
+              {archVersions.length} baseline(s) · {repositories.length} repo(s)
+            </span>
+          </div>
+
           {/* Document Type Selector */}
           <div className="space-y-2">
             <label className="text-xs font-mono uppercase text-muted-foreground">Select Documentation Type</label>
@@ -1050,6 +1222,171 @@ function GenerateModal({
             </div>
           </div>
 
+          {/* Source Mode Switcher (only shown when type supports multiple modes) */}
+          {currentRules.allowedModes.length > 1 ? (
+            <div className="space-y-2 p-3 rounded border border-border bg-panel/40">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-mono uppercase text-muted-foreground">Source Mode</label>
+                <span className="text-[11px] text-muted-foreground font-mono">
+                  {currentRules.description}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {currentRules.allowedModes.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setSourceMode(mode)}
+                    className={`px-3 py-1.5 rounded border text-xs font-medium transition-colors ${
+                      sourceMode === mode
+                        ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                        : "border-border hover:bg-surface text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {mode === "architecture"
+                      ? selectedType === "database_documentation"
+                        ? "Architecture (Intended Design)"
+                        : "Architecture Baseline Only"
+                      : mode === "repository"
+                      ? selectedType === "database_documentation"
+                        ? "Repository (Actual Schema & Models)"
+                        : "Repository Implementation Only"
+                      : "Combined (Architecture + Repository)"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="p-2.5 rounded border border-border/70 bg-surface/40 text-[11px] text-muted-foreground flex items-center justify-between font-mono">
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="h-3 w-3 text-primary" /> Source Mode: <strong>Repository Only</strong>
+              </span>
+              <span>{currentRules.description}</span>
+            </div>
+          )}
+
+          {/* Dynamic Source Selectors */}
+          <div className="space-y-4">
+            {/* Architecture Baseline Selector (visible only when architecture is included) */}
+            {requiresArch && (
+              <div className="space-y-1.5 p-3 rounded border border-border/80 bg-surface/30">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-mono uppercase text-foreground font-medium flex items-center gap-1.5">
+                    <Network className="h-3.5 w-3.5 text-primary" />
+                    <span>Architecture Baseline</span>
+                    <span className="text-primary font-bold">*</span>
+                  </label>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                    Required
+                  </span>
+                </div>
+
+                {archVersions.length === 0 ? (
+                  <div className="p-2.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold">No Saved Architecture Versions</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Project &apos;{projectName}&apos; has no saved architecture versions. Create an architecture version first to generate this documentation.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <select
+                    value={versionId}
+                    onChange={(e) => setVersionId(e.target.value)}
+                    className="w-full h-8 px-2 rounded border border-border bg-background text-xs font-mono focus:outline-none focus:border-primary/50"
+                  >
+                    {archVersions.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name} (v{v.version_number}) — {v.status}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
+            {/* Repository Implementation Evidence Selector (visible only when repository is included) */}
+            {requiresRepo && (
+              <div className="space-y-2.5 p-3 rounded border border-border/80 bg-surface/30">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-mono uppercase text-foreground font-medium flex items-center gap-1.5">
+                    <BookOpen className="h-3.5 w-3.5 text-primary" />
+                    <span>Repository Implementation Evidence</span>
+                    <span className="text-primary font-bold">*</span>
+                  </label>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                    Required
+                  </span>
+                </div>
+
+                {loadingRepos ? (
+                  <div className="p-3 text-xs text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading connected repositories…
+                  </div>
+                ) : repositories.length === 0 ? (
+                  <div className="p-2.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold">No Repositories Connected</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Project &apos;{projectName}&apos; has no connected repositories. Connect a repository and run an analysis scan to generate repository documentation.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-muted-foreground font-mono">Select Repository</label>
+                      <select
+                        value={selectedRepoId}
+                        onChange={(e) => setSelectedRepoId(e.target.value)}
+                        className="w-full h-8 px-2 rounded border border-border bg-background text-xs font-mono focus:outline-none focus:border-primary/50"
+                      >
+                        {repositories.map((r) => (
+                          <option key={r.repository.id} value={r.repository.id}>
+                            {r.repository.repository_name} ({r.repository.default_branch})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-muted-foreground font-mono">Completed Analysis Snapshot</label>
+                      {loadingAnalyses ? (
+                        <div className="h-8 px-2 flex items-center text-xs text-muted-foreground border border-border rounded">
+                          <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> Loading scans…
+                        </div>
+                      ) : analyses.length === 0 ? (
+                        <div className="h-8 px-2 flex items-center text-[11px] text-amber-500 border border-amber-500/30 bg-amber-500/5 rounded font-mono truncate">
+                          No completed scans for this repository
+                        </div>
+                      ) : (
+                        <select
+                          value={analysisId}
+                          onChange={(e) => setAnalysisId(e.target.value)}
+                          className="w-full h-8 px-2 rounded border border-border bg-background text-xs font-mono focus:outline-none focus:border-primary/50"
+                        >
+                          {analyses.map((a) => {
+                            const branch = (a.analysis_data?.branch as string) || a.branch || "main";
+                            const sha = a.commit_sha ? a.commit_sha.slice(0, 7) : "snapshot";
+                            const date = a.completed_at || a.created_at ? new Date(a.completed_at || a.created_at).toLocaleDateString() : "";
+                            return (
+                              <option key={a.id} value={a.id}>
+                                {sha} ({branch}) — {date}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Title */}
           <div className="space-y-1.5">
             <label className="text-xs font-mono uppercase text-muted-foreground">Document Title</label>
@@ -1059,41 +1396,6 @@ function GenerateModal({
               onChange={(e) => setTitle(e.target.value)}
               className="w-full h-8 px-3 rounded border border-border bg-background text-xs font-medium focus:outline-none focus:border-primary/50"
             />
-          </div>
-
-          {/* Sources: Architecture Version & Repository Analysis */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-mono uppercase text-muted-foreground">Architecture Baseline</label>
-              <select
-                value={versionId}
-                onChange={(e) => setVersionId(e.target.value)}
-                className="w-full h-8 px-2 rounded border border-border bg-background text-xs font-mono focus:outline-none focus:border-primary/50"
-              >
-                <option value="">Latest Architecture</option>
-                {archVersions.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name} (v{v.version_number})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-mono uppercase text-muted-foreground">Repository Analysis Scan</label>
-              <select
-                value={analysisId}
-                onChange={(e) => setAnalysisId(e.target.value)}
-                className="w-full h-8 px-2 rounded border border-border bg-background text-xs font-mono focus:outline-none focus:border-primary/50"
-              >
-                <option value="">Latest Git Analysis Scan</option>
-                {repoAnalyses.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.commit_sha ? a.commit_sha.slice(0, 7) : "Analysis"} ({new Date(a.created_at).toLocaleDateString()})
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
 
           {/* Output Format */}
@@ -1151,6 +1453,18 @@ function GenerateModal({
             </label>
           </div>
 
+          {/* Validation Error Notices */}
+          {!hasValidArch && requiresArch && (
+            <p className="text-xs text-amber-500 font-mono">
+              ⚠️ Cannot generate: A saved architecture baseline is required for {getDocLabel(selectedType)}.
+            </p>
+          )}
+          {!hasValidRepo && requiresRepo && (
+            <p className="text-xs text-amber-500 font-mono">
+              ⚠️ Cannot generate: A completed repository analysis scan is required for {getDocLabel(selectedType)}.
+            </p>
+          )}
+
           {/* Footer Submit */}
           <div className="pt-2 flex items-center justify-end gap-2 border-t border-border">
             <Button type="button" variant="ghost" size="sm" onClick={onClose}>
@@ -1159,8 +1473,8 @@ function GenerateModal({
             <Button
               type="submit"
               size="sm"
-              disabled={submitting}
-              className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+              disabled={!canGenerate}
+              className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
               {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               {submitting ? "Synthesizing Documentation…" : "Generate Document"}

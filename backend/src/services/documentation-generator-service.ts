@@ -28,6 +28,7 @@ export interface DocumentGenerationInput {
   title: string;
   format: DocumentationFormat;
   type: DocumentationType | string;
+  sourceMode?: "architecture" | "repository" | "combined";
   architecture?: { version: ArchitectureVersion; nodes: ArchitectureNode[]; edges: ArchitectureEdge[] };
   analysis?: RepositoryAnalysis;
   repository?: RepositoryRecord;
@@ -57,6 +58,14 @@ function unavailable(r: string) { return `\n> ℹ️ **${r}**\n`; }
 function safeTs(ts: string | null | undefined) {
   if (!ts) return "—";
   try { return new Date(ts).toISOString(); } catch { return ts; }
+}
+
+function sanitizeSecrets(content: string): string {
+  return content
+    .replace(/([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)([^:\s\/]+):([^@\s\/]+)@/g, "$1$2:********@")
+    .replace(/(bearer\s+)[A-Za-z0-9_\-.~+/]+=*/gi, "$1[REDACTED_TOKEN]")
+    .replace(/-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+ PRIVATE KEY-----/g, "[REDACTED_PRIVATE_KEY]")
+    .replace(/((?:password|secret|api_key|token|access_key)\s*[:=]\s*)(['"]?)[^\s'"\n\r]{4,}\2/gi, "$1$2[REDACTED_SECRET]$2");
 }
 
 // ─── Section Builders ────────────────────────────────────────────────────────
@@ -110,7 +119,7 @@ export class DocumentationGeneratorService {
       analysis: input.analysis,
       repository: input.repository,
     };
-    const content = this.assembleDocument(input, ctx, now);
+    const content = sanitizeSecrets(this.assembleDocument(input, ctx, now));
     return {
       content,
       sections: [],
@@ -149,6 +158,7 @@ export class DocumentationGeneratorService {
     // Type-specific section
     switch (input.type) {
       case "architecture_overview": parts.push(...this.sectionArchitecture(ctx)); break;
+      case "system_design": parts.push(...this.sectionSystemDesign(ctx)); break;
       case "api_documentation": parts.push(...this.sectionAPI(ctx)); break;
       case "database_documentation": parts.push(...this.sectionDatabase(ctx)); break;
       case "deployment":
@@ -156,8 +166,12 @@ export class DocumentationGeneratorService {
       case "security":
       case "testing_security": parts.push(...this.sectionTestingSecurity(ctx)); break;
       case "repository_overview": parts.push(...this.sectionRepository(ctx)); break;
-      case "system_design": break; // Overview already covers this
       default: break;
+    }
+
+    // If both sources are present, add combined architecture vs implementation analysis
+    if (ctx.architecture && ctx.analysis && ctx.analysis.status === "completed") {
+      parts.push(...this.sectionCombinedAlignment(ctx));
     }
 
     let content = parts.join("\n");
@@ -236,9 +250,8 @@ export class DocumentationGeneratorService {
         (ad.risks as string[]).forEach((r) => lines.push(`- ${r}`));
       }
       lines.push("", `> **Source** [✓]: Architecture version **${arch.version.name}** (id: \`${arch.version.id}\`)`);
-    } else {
-      lines.push(unavailable("No architecture version selected. Select a saved architecture version to populate this section."));
     }
+
     if (ctx.analysis && ctx.analysis.status === "completed") {
       const langs = Object.entries(ctx.analysis.languages || {}) as Array<[string, number]>;
       if (langs.length) {
@@ -257,9 +270,155 @@ export class DocumentationGeneratorService {
         lines.push(`**Analysis completed**: ${safeTs(ctx.analysis.completed_at)}`);
         lines.push("", `> **Source** [✓]: Repository analysis \`${ctx.analysis.id}\`, commit \`${ctx.analysis.commit_sha || "—"}\``);
       }
-    } else if (!ctx.analysis) {
-      lines.push(unavailable("No repository analysis available. Connect a repository and run an analysis."));
     }
+
+    if (!ctx.architecture && (!ctx.analysis || ctx.analysis.status !== "completed")) {
+      lines.push(unavailable("No architecture version or completed repository analysis provided."));
+    }
+    return lines;
+  }
+
+  private sectionSystemDesign(ctx: GenerationContext): string[] {
+    const lines: string[] = [h2("System Design & Architecture Specification")];
+    if (!ctx.architecture) {
+      lines.push(unavailable("No architecture version selected. Select a saved architecture version to generate system design documentation."));
+      return lines;
+    }
+    const arch = ctx.architecture;
+    const nodeMap = new Map(arch.nodes.map((n) => [n.id, n.name]));
+
+    lines.push(h3("Component Decomposition & Responsibilities"));
+    lines.push("| Component | Architectural Type | Technology | Responsibility / Purpose |");
+    lines.push("| --- | --- | --- | --- |");
+    arch.nodes.forEach((n) => {
+      lines.push(`| **${n.name}** | ${badge(n.type)} | ${n.technology || unknownField("technology")} | ${n.description || unknownField("responsibility")} |`);
+    });
+
+    lines.push(h3("Architectural Patterns & Communication Protocols"));
+    if (arch.edges.length > 0) {
+      lines.push("| Initiator (Source) | Recipient (Target) | Interaction Type | Protocol |");
+      lines.push("| --- | --- | --- | --- |");
+      arch.edges.forEach((e) => {
+        lines.push(`| ${nodeMap.get(e.source_node_id) || e.source_node_id} | ${nodeMap.get(e.target_node_id) || e.target_node_id} | ${badge(e.relationship)} | ${e.protocol || badge("HTTP / REST")} |`);
+      });
+    } else {
+      lines.push("- _No explicit component connections defined in this architecture baseline._");
+    }
+
+    const ad = arch.version.architecture_data as unknown as Record<string, unknown>;
+    lines.push(h3("Architectural Trade-offs & Quality Attributes"));
+    if (Array.isArray(ad?.scalabilityConsiderations) && ad.scalabilityConsiderations.length) {
+      lines.push("**Scalability & Performance Attributes**:");
+      (ad.scalabilityConsiderations as string[]).forEach((s) => lines.push(`- ${s}`));
+    } else {
+      lines.push("- Scalability: Horizontally scalable stateless services with centralized data persistence.");
+    }
+    if (Array.isArray(ad?.securityConsiderations) && ad.securityConsiderations.length) {
+      lines.push("\n**Security & Isolation Attributes**:");
+      (ad.securityConsiderations as string[]).forEach((s) => lines.push(`- ${s}`));
+    }
+    if (Array.isArray(ad?.risks) && ad.risks.length) {
+      lines.push("\n**Architectural Risks & Mitigations**:");
+      (ad.risks as string[]).forEach((r) => lines.push(`- ${r}`));
+    }
+
+    lines.push("", `> **Source** [✓]: Architecture baseline **${arch.version.name}** (v${arch.version.version_number})`);
+    return lines;
+  }
+
+  private sectionCombinedAlignment(ctx: GenerationContext): string[] {
+    if (!ctx.architecture || !ctx.analysis) return [];
+    const lines: string[] = [h2("Architecture vs. Implementation Analysis")];
+    lines.push("> **Source Synchronization**: Comparing Intended Architecture with Observed Repository Evidence\n");
+
+    const archNodes = ctx.architecture.nodes;
+    const detectedFrameworks = (Array.isArray(ctx.analysis.analysis_data?.detectedFrameworks)
+      ? ctx.analysis.analysis_data.detectedFrameworks
+      : ctx.analysis.frameworks || []) as Array<DetectedFramework | string>;
+    const detectedRoutes = (ctx.analysis.architecture?.routes || []) as DetectedRoute[];
+    const detectedModels = ((ctx.analysis.architecture as any)?.models || []) as Array<{ name: string; file?: string; fields?: string[] }>;
+    const detectedDatabases = (ctx.analysis.architecture?.databases || []) as string[];
+    const entryPoints = (ctx.analysis.analysis_data?.entryPoints || []) as Array<{ path: string; kind?: string }>;
+
+    // 1. Intended Architecture
+    lines.push(h3("1. Intended Architecture Baseline"));
+    lines.push(`- **Architecture Version**: ${ctx.architecture.version.name} (v${ctx.architecture.version.version_number}) [${ctx.architecture.version.status}]`);
+    lines.push(`- **Planned Components**: ${archNodes.length}`);
+    archNodes.forEach((n) => {
+      lines.push(`  - **${n.name}** (${n.type})${n.technology ? ` — Expected tech: \`${n.technology}\`` : ""}`);
+    });
+    lines.push(`- **Planned Connections**: ${ctx.architecture.edges.length}`);
+
+    // 2. Observed Repository Implementation
+    lines.push(h3("2. Observed Repository Implementation"));
+    lines.push(`- **Snapshot Commit**: \`${ctx.analysis.commit_sha || "latest"}\``);
+    lines.push(`- **Discovered Frameworks**: ${detectedFrameworks.length > 0 ? detectedFrameworks.map((f) => typeof f === "string" ? f : f.name).join(", ") : "None detected"}`);
+    lines.push(`- **Discovered Routes**: ${detectedRoutes.length} endpoint(s)`);
+    lines.push(`- **Discovered Models/Entities**: ${detectedModels.length} model(s)`);
+    lines.push(`- **Discovered Data Stores**: ${detectedDatabases.length > 0 ? detectedDatabases.join(", ") : "None detected"}`);
+    if (entryPoints.length) {
+      lines.push(`- **Entry Points**: ${entryPoints.map((e) => `\`${e.path}\``).join(", ")}`);
+    }
+
+    // 3. Verified Matches
+    lines.push(h3("3. Verified Matches"));
+    const matches: string[] = [];
+    archNodes.forEach((node) => {
+      const nodeTech = (node.technology || "").toLowerCase();
+      const nodeName = node.name.toLowerCase();
+      const matchedFw = detectedFrameworks.find((f) => {
+        const fwName = (typeof f === "string" ? f : f.name).toLowerCase();
+        return fwName.includes(nodeTech) || (nodeTech && nodeTech.includes(fwName)) || nodeName.includes(fwName);
+      });
+      const matchedModel = detectedModels.find((m) => m.name.toLowerCase() === nodeName);
+      if (matchedFw) {
+        matches.push(`- **${node.name}** (${node.type}): Verified match with detected framework \`${typeof matchedFw === "string" ? matchedFw : matchedFw.name}\``);
+      } else if (matchedModel) {
+        matches.push(`- **${node.name}** (${node.type}): Verified match with data model \`${matchedModel.name}\` in \`${matchedModel.file || "schema"}\``);
+      } else if (node.type === "api" && detectedRoutes.length > 0) {
+        matches.push(`- **${node.name}** (${node.type}): Verified API routes implemented (${detectedRoutes.length} endpoints detected)`);
+      }
+    });
+
+    if (matches.length > 0) {
+      matches.forEach((m) => lines.push(m));
+    } else {
+      lines.push("- _No explicit automated name/technology matches confirmed between planned components and detected framework signatures._");
+    }
+
+    // 4. Missing or Additional Elements
+    lines.push(h3("4. Missing or Additional Elements"));
+    const missing: string[] = [];
+    archNodes.forEach((node) => {
+      const hasMatch = matches.some((m) => m.includes(`**${node.name}**`));
+      if (!hasMatch) {
+        missing.push(`- **Missing / Unverified in Code**: Component **${node.name}** (${node.type}${node.technology ? `, \`${node.technology}\`` : ""}) has no direct signature in current repository scan.`);
+      }
+    });
+    if (missing.length > 0) {
+      missing.forEach((m) => lines.push(m));
+    } else {
+      lines.push("- All planned architecture components have corresponding implementation signatures.");
+    }
+
+    const additional: string[] = [];
+    detectedFrameworks.forEach((f) => {
+      const name = typeof f === "string" ? f : f.name;
+      const represented = archNodes.some((n) => (n.technology || "").toLowerCase().includes(name.toLowerCase()) || n.name.toLowerCase().includes(name.toLowerCase()));
+      if (!represented) {
+        additional.push(`- **Additional Implementation in Code**: Framework \`${name}\` discovered in repository but not explicitly designated in planned architecture baseline.`);
+      }
+    });
+    if (additional.length > 0) {
+      additional.slice(0, 5).forEach((a) => lines.push(a));
+    }
+
+    // 5. Unknown or Unverified Information
+    lines.push(h3("5. Unknown or Unverified Information"));
+    lines.push("- Dynamic runtime traffic metrics and production load behavior are unverified (static analysis only).");
+    lines.push("- Unannotated HTTP endpoints have unverified request and response payload schemas.");
+    lines.push("- Secrets, environment variable values, and connection credentials are intentionally omitted for security.");
+
     return lines;
   }
 

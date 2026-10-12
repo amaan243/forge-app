@@ -73,6 +73,7 @@ export const documentGenerate = z.object({
   ]),
   title: z.string().trim().min(1).max(200),
   format: z.enum(["markdown", "html", "mermaid", "openapi_json", "openapi_yaml"]),
+  source_mode: z.enum(["architecture", "repository", "combined"]).optional(),
   version_id: uuid.optional().nullable(),
   repository_analysis_id: uuid.optional().nullable(),
   repository_id: uuid.optional().nullable(),

@@ -58,10 +58,13 @@ export interface DocumentationStalenessItem {
   updated_at: string;
 }
 
+export type DocumentationSourceMode = "architecture" | "repository" | "combined";
+
 export interface GenerateDocumentationInput {
   type: DocumentationType;
   title: string;
   format: DocumentationFormat;
+  source_mode?: DocumentationSourceMode;
   version_id?: string | null;
   repository_analysis_id?: string | null;
   repository_id?: string | null;
