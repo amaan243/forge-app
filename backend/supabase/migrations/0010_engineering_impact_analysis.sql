@@ -27,15 +27,23 @@ create index if not exists impact_reports_snapshot_idx on public.impact_reports(
 
 alter table public.impact_reports enable row level security;
 
+drop policy if exists impact_reports_access on public.impact_reports;
 create policy impact_reports_access on public.impact_reports for select using (
   public.is_workspace_member((select workspace_id from public.projects where id = project_id))
 );
 
+drop policy if exists impact_reports_manage on public.impact_reports;
 create policy impact_reports_manage on public.impact_reports for all using (
   public.is_workspace_member((select workspace_id from public.projects where id = project_id))
 ) with check (
   public.is_workspace_member((select workspace_id from public.projects where id = project_id))
 );
 
-alter publication supabase_realtime add table public.impact_reports;
+do $$
+begin
+  alter publication supabase_realtime add table public.impact_reports;
+exception when duplicate_object then null;
+          when others then null;
+end $$;
+
 notify pgrst, 'reload schema';
