@@ -14,6 +14,7 @@ import { repositoryIntelligenceRoutes } from "./routes/repository-intelligence-r
 import { engineeringRoutes } from "./routes/engineering-intelligence-routes.js";
 import { platformRoutes, notificationRoutes, settingsRoutes, workspaceSettingsRoutes } from "./routes/platform-operations-routes.js";
 import { workflowRoutes } from "./routes/workflow-orchestration-routes.js";
+import { knowledgeGraphRoutes } from "./routes/knowledge-graph-routes.js";
 import { searchRoutes } from "./routes/search-routes.js";
 import { openApiRoutes } from "./routes/openapi-routes.js";
 import { authRoutes } from "./routes/auth-routes.js";
@@ -44,6 +45,7 @@ app.use("/api/v1/projects/:projectId/architecture", architectureRoutes);
 app.use("/api/v1/projects/:projectId", repositoryIntelligenceRoutes);
 app.use("/api/v1/projects/:projectId", engineeringRoutes);
 app.use("/api/v1/projects/:projectId", workflowRoutes);
+app.use("/api/v1/projects/:projectId", knowledgeGraphRoutes);
 app.use("/api/v1/projects/:projectId", platformRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/settings", settingsRoutes);

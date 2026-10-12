@@ -186,3 +186,27 @@ export {
   type WorkflowProjectContext,
   type RunWorkflowInput,
 } from "./workflow";
+
+export {
+  getKnowledgeGraphContext,
+  getKnowledgeGraph,
+  getKnowledgeGraphNeighborhood,
+  getKnowledgeGraphTraceability,
+  analyzeGraphNodeImpact,
+  type KnowledgeGraphEntityType,
+  type KnowledgeGraphRelationType,
+  type EvidenceConfidence,
+  type FreshnessStatus,
+  type SourceVersionContext,
+  type KnowledgeGraphEntityNode,
+  type KnowledgeGraphRelationship,
+  type TraceabilityChainStep,
+  type TraceabilityReport,
+  type KnowledgeGraphCoverage,
+  type KnowledgeGraphSummary,
+  type KnowledgeGraphSnapshot,
+  type KnowledgeGraphContext,
+  type KnowledgeGraphQueryResult,
+  type KnowledgeGraphNeighborhood,
+  type QueryKnowledgeGraphParams,
+} from "./knowledge-graph";

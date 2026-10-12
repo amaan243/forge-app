@@ -27,6 +27,7 @@ import { Route as AppSnapshotsRouteImport } from './routes/_app.snapshots'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppRepositoryRouteImport } from './routes/_app.repository'
 import { Route as AppPlaygroundRouteImport } from './routes/_app.playground'
+import { Route as AppKnowledgeGraphRouteImport } from './routes/_app.knowledge-graph'
 import { Route as AppImpactRouteImport } from './routes/_app.impact'
 import { Route as AppExportsRouteImport } from './routes/_app.exports'
 import { Route as AppDriftRouteImport } from './routes/_app.drift'
@@ -125,6 +126,11 @@ const AppPlaygroundRoute = AppPlaygroundRouteImport.update({
   path: '/playground',
   getParentRoute: () => AppRoute,
 } as any)
+const AppKnowledgeGraphRoute = AppKnowledgeGraphRouteImport.update({
+  id: '/knowledge-graph',
+  path: '/knowledge-graph',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppImpactRoute = AppImpactRouteImport.update({
   id: '/impact',
   path: '/impact',
@@ -183,6 +189,7 @@ export interface FileRoutesByFullPath {
   '/drift': typeof AppDriftRoute
   '/exports': typeof AppExportsRoute
   '/impact': typeof AppImpactRoute
+  '/knowledge-graph': typeof AppKnowledgeGraphRoute
   '/playground': typeof AppPlaygroundRoute
   '/repository': typeof AppRepositoryRoute
   '/settings': typeof AppSettingsRoute
@@ -209,6 +216,7 @@ export interface FileRoutesByTo {
   '/drift': typeof AppDriftRoute
   '/exports': typeof AppExportsRoute
   '/impact': typeof AppImpactRoute
+  '/knowledge-graph': typeof AppKnowledgeGraphRoute
   '/playground': typeof AppPlaygroundRoute
   '/repository': typeof AppRepositoryRoute
   '/settings': typeof AppSettingsRoute
@@ -238,6 +246,7 @@ export interface FileRoutesById {
   '/_app/drift': typeof AppDriftRoute
   '/_app/exports': typeof AppExportsRoute
   '/_app/impact': typeof AppImpactRoute
+  '/_app/knowledge-graph': typeof AppKnowledgeGraphRoute
   '/_app/playground': typeof AppPlaygroundRoute
   '/_app/repository': typeof AppRepositoryRoute
   '/_app/settings': typeof AppSettingsRoute
@@ -268,6 +277,7 @@ export interface FileRouteTypes {
     | '/drift'
     | '/exports'
     | '/impact'
+    | '/knowledge-graph'
     | '/playground'
     | '/repository'
     | '/settings'
@@ -294,6 +304,7 @@ export interface FileRouteTypes {
     | '/drift'
     | '/exports'
     | '/impact'
+    | '/knowledge-graph'
     | '/playground'
     | '/repository'
     | '/settings'
@@ -322,6 +333,7 @@ export interface FileRouteTypes {
     | '/_app/drift'
     | '/_app/exports'
     | '/_app/impact'
+    | '/_app/knowledge-graph'
     | '/_app/playground'
     | '/_app/repository'
     | '/_app/settings'
@@ -473,6 +485,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPlaygroundRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/knowledge-graph': {
+      id: '/_app/knowledge-graph'
+      path: '/knowledge-graph'
+      fullPath: '/knowledge-graph'
+      preLoaderRoute: typeof AppKnowledgeGraphRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/impact': {
       id: '/_app/impact'
       path: '/impact'
@@ -541,6 +560,7 @@ interface AppRouteChildren {
   AppDriftRoute: typeof AppDriftRoute
   AppExportsRoute: typeof AppExportsRoute
   AppImpactRoute: typeof AppImpactRoute
+  AppKnowledgeGraphRoute: typeof AppKnowledgeGraphRoute
   AppPlaygroundRoute: typeof AppPlaygroundRoute
   AppRepositoryRoute: typeof AppRepositoryRoute
   AppSettingsRoute: typeof AppSettingsRoute
@@ -562,6 +582,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDriftRoute: AppDriftRoute,
   AppExportsRoute: AppExportsRoute,
   AppImpactRoute: AppImpactRoute,
+  AppKnowledgeGraphRoute: AppKnowledgeGraphRoute,
   AppPlaygroundRoute: AppPlaygroundRoute,
   AppRepositoryRoute: AppRepositoryRoute,
   AppSettingsRoute: AppSettingsRoute,

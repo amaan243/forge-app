@@ -64,7 +64,8 @@ type NavItem = {
     | "/timeline"
     | "/snapshots"
     | "/story"
-    | "/workflow";
+    | "/workflow"
+    | "/knowledge-graph";
   label: string;
   icon: typeof LayoutDashboard;
   exact?: boolean;
@@ -73,6 +74,7 @@ type NavItem = {
 const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { to: "/workflow", label: "Workflow", icon: ActivityIcon },
+  { to: "/knowledge-graph", label: "Knowledge Graph", icon: Share2 },
   { to: "/workspace", label: "Workspace", icon: Workflow },
   { to: "/architecture", label: "Architecture", icon: Network },
   { to: "/repository", label: "Repository", icon: GitBranch },

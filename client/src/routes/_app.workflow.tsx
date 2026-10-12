@@ -231,9 +231,9 @@ function WorkflowOrchestrationPage() {
     return (
       <div className="flex h-[calc(100vh-3rem)] items-center justify-center p-6">
         <EmptyState
-          icon={Workflow}
+          glyph="pulse"
           title="No Project Selected"
-          description="Select an engineering project from the workstation switcher to run and inspect the workflow orchestration."
+          body="Select an engineering project from the workstation switcher to run and inspect the workflow orchestration."
         />
       </div>
     );
