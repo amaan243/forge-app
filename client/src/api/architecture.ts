@@ -419,9 +419,11 @@ export async function getTimelineEvents(projectId: string): Promise<TimelineEven
 export interface ArchitectureSnapshot {
   id: string;
   project_id: string;
-  version_id: string;
+  architecture_version_id?: string;
+  version_id?: string;
   name: string;
   description: string | null;
+  type?: string;
   snapshot_data: Record<string, unknown>;
   created_by: string;
   created_at: string;
@@ -436,11 +438,24 @@ export async function getArchitectureSnapshots(projectId: string): Promise<Archi
 
 export async function createArchitectureSnapshot(
   projectId: string,
-  data: { version_id: string; name: string; description?: string }
+  data: {
+    version_id?: string;
+    architecture_version_id?: string;
+    name: string;
+    description?: string;
+    type?: string;
+  }
 ): Promise<ArchitectureSnapshot> {
+  const versionId = data.architecture_version_id || data.version_id;
   const response = await apiClient.post<{ success: boolean; data: ArchitectureSnapshot }>(
     `/api/v1/projects/${projectId}/architecture/snapshots`,
-    data
+    {
+      architecture_version_id: versionId,
+      version_id: versionId,
+      name: data.name,
+      description: data.description || undefined,
+      type: data.type || "milestone",
+    }
   );
   return response.data.data;
 }

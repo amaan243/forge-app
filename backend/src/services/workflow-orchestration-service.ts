@@ -1121,9 +1121,9 @@ export class WorkflowOrchestrationService {
         externalScanningConfigured,
       },
       recommendedNextAction: {
-        action: "Configure CI verification pipeline",
-        description: "Connect automated test pipelines and security scanners for full verification evidence.",
-        targetRoute: "/repository",
+        action: "Evaluate Release Readiness Quality Gate",
+        description: "Evaluate policy-driven readiness gates and verified CI evidence in Release Quality.",
+        targetRoute: "/quality",
       },
       reused: true,
       isStale: false,

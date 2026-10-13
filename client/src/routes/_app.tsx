@@ -16,6 +16,7 @@ import {
   Plus,
   CheckCircle2,
   ShieldAlert,
+  ShieldCheck,
   Sparkles,
   Package,
   User,
@@ -48,6 +49,7 @@ export const Route = createFileRoute("/_app")({
 type NavItem = {
   to:
     | "/"
+    | "/quality"
     | "/workspace"
     | "/architecture"
     | "/repository"
@@ -73,6 +75,7 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { to: "/quality", label: "Release Quality", icon: ShieldCheck },
   { to: "/workflow", label: "Workflow", icon: ActivityIcon },
   { to: "/knowledge-graph", label: "Knowledge Graph", icon: Share2 },
   { to: "/workspace", label: "Workspace", icon: Workflow },

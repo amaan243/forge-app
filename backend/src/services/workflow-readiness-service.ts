@@ -286,6 +286,19 @@ export class WorkflowReadinessService {
           evidence: `${secChecks.length} static security checks executed with 0 advisories.`,
         });
       }
+
+      const externalScanningConfigured = Boolean(stageG.evidence.externalScanningConfigured);
+      if (!externalScanningConfigured) {
+        checks.push({
+          id: "check_security_scanner",
+          category: "security",
+          name: "External Security Scanner Availability",
+          status: "warn",
+          evidence: "External vulnerability scanner not configured. Static pattern checks alone do not constitute a full CVE vulnerability scan.",
+          actionRequired: "Configure dedicated security vulnerability scanner.",
+        });
+        warnings.push("External security scanner not configured.");
+      }
     }
 
     // 6. Stale or Missing Required Documentation

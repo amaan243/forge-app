@@ -12,7 +12,25 @@ export const architectureNodeCreate = z.object({ node_key: z.string().trim().min
 export const architectureNodeUpdate = architectureNodeCreate.partial();
 export const architectureEdgeCreate = z.object({ source_node_id: uuid, target_node_id: uuid, relationship: z.enum(["calls", "reads", "writes", "publishes", "subscribes", "authenticates", "depends_on", "connects_to"]), protocol: z.string().max(120).optional(), description: z.string().max(2000).optional(), metadata: z.record(z.unknown()).default({}) });
 export const architectureEdgeUpdate = architectureEdgeCreate.partial();
-export const snapshotCreate = z.object({ architecture_version_id: uuid, name: z.string().trim().min(1).max(160), description: z.string().max(2000).optional(), type: z.enum(["milestone", "sprint", "beta", "production", "custom"]), snapshot_data: z.record(z.unknown()).optional() });
+export const snapshotCreate = z
+  .object({
+    architecture_version_id: uuid.optional(),
+    version_id: uuid.optional(),
+    name: z.string().trim().min(1).max(160),
+    description: z.string().max(2000).optional().nullable(),
+    type: z.enum(["milestone", "sprint", "beta", "production", "custom"]).default("milestone"),
+    snapshot_data: z.record(z.unknown()).optional(),
+  })
+  .refine((data) => Boolean(data.architecture_version_id || data.version_id), {
+    message: "architecture_version_id or version_id is required",
+    path: ["architecture_version_id"],
+  })
+  .transform((data) => ({
+    ...data,
+    architecture_version_id: (data.architecture_version_id || data.version_id)!,
+    type: data.type || "milestone",
+    description: data.description ?? undefined,
+  }));
 export const compareQuery = z.object({ from: uuid, to: uuid });
 export const explanationRequest = z.object({ context: z.string().max(4000).optional() });
 export const architectureVersionSave = z.object({

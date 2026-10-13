@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Camera, RotateCcw, Plus, Layers, FolderOpen, Loader2 } from "lucide-react";
+import { Camera, RotateCcw, Plus, Layers, FolderOpen, Loader2, Tag } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -42,6 +42,8 @@ function SnapshotsPage() {
   // New snapshot modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [snapshotName, setSnapshotName] = useState("");
+  const [snapshotDescription, setSnapshotDescription] = useState("");
+  const [snapshotType, setSnapshotType] = useState<"milestone" | "sprint" | "beta" | "production" | "custom">("milestone");
   const [selectedVersionId, setSelectedVersionId] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -65,7 +67,9 @@ function SnapshotsPage() {
         if (!isCurrent) return;
         setSnapshots(snaps);
         setVersions(vers);
-        if (vers.length > 0) setSelectedVersionId(vers[0].id);
+        if (vers.length > 0) {
+          setSelectedVersionId(vers[0].id);
+        }
       } catch {
         if (isCurrent) {
           setSnapshots([]);
@@ -85,20 +89,30 @@ function SnapshotsPage() {
 
   const handleCreateSnapshot = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentProject || !snapshotName.trim() || !selectedVersionId) return;
+    const versionIdToUse = selectedVersionId || (versions.length > 0 ? versions[0].id : "");
+    if (!currentProject || !snapshotName.trim() || !versionIdToUse) {
+      toast.error("Please provide a snapshot name and select an architecture version");
+      return;
+    }
 
     setCreating(true);
     try {
       const snap = await createArchitectureSnapshot(currentProject.id, {
         name: snapshotName.trim(),
-        version_id: selectedVersionId,
+        version_id: versionIdToUse,
+        architecture_version_id: versionIdToUse,
+        description: snapshotDescription.trim() || undefined,
+        type: snapshotType,
       });
       setSnapshots((prev) => [snap, ...prev]);
       setIsModalOpen(false);
       setSnapshotName("");
-      toast.success(`Snapshot "${snap.name}" created`);
-    } catch {
-      toast.error("Failed to create snapshot");
+      setSnapshotDescription("");
+      setSnapshotType("milestone");
+      toast.success(`Snapshot "${snap.name}" created successfully`);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || "Failed to create snapshot";
+      toast.error(msg);
     } finally {
       setCreating(false);
     }
@@ -111,9 +125,16 @@ function SnapshotsPage() {
     setRestoringId(snap.id);
     try {
       await restoreArchitectureSnapshot(currentProject.id, snap.id);
-      toast.success(`Snapshot "${snap.name}" restored successfully!`);
-    } catch {
-      toast.error("Failed to restore snapshot");
+      toast.success(`Snapshot "${snap.name}" restored successfully as new architecture version!`);
+      const [snaps, vers] = await Promise.all([
+        getArchitectureSnapshots(currentProject.id),
+        getArchitectureVersions(currentProject.id),
+      ]);
+      setSnapshots(snaps);
+      setVersions(vers);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || "Failed to restore snapshot";
+      toast.error(msg);
     } finally {
       setRestoringId(null);
     }
@@ -150,7 +171,16 @@ function SnapshotsPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <ProjectSwitcher variant="inline" />
-          <Button onClick={() => setIsModalOpen(true)} disabled={versions.length === 0} size="sm">
+          <Button
+            onClick={() => {
+              if (versions.length > 0 && !selectedVersionId) {
+                setSelectedVersionId(versions[0].id);
+              }
+              setIsModalOpen(true);
+            }}
+            disabled={versions.length === 0}
+            size="sm"
+          >
             <Plus className="h-3.5 w-3.5 mr-1" /> New snapshot
           </Button>
         </div>
@@ -168,7 +198,17 @@ function SnapshotsPage() {
             Create milestone checkpoints of your architecture versions to easily reference or restore in the future.
           </p>
           {versions.length > 0 && (
-            <Button size="sm" onClick={() => setIsModalOpen(true)}>Create Snapshot</Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (versions.length > 0 && !selectedVersionId) {
+                  setSelectedVersionId(versions[0].id);
+                }
+                setIsModalOpen(true);
+              }}
+            >
+              Create Snapshot
+            </Button>
           )}
         </div>
       ) : (
@@ -177,9 +217,14 @@ function SnapshotsPage() {
             <div key={s.id} className="surface-panel p-4 space-y-3 border border-border rounded-lg hover:border-primary/40 transition-colors">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Layers className="h-3.5 w-3.5 text-primary" />
                     <span className="font-display font-semibold text-foreground">{s.name}</span>
+                    {s.type && (
+                      <span className="px-1.5 py-0.5 text-[10px] uppercase font-mono font-medium rounded bg-secondary text-secondary-foreground border border-border">
+                        {s.type}
+                      </span>
+                    )}
                   </div>
                   <div className="text-[11px] font-mono text-muted-foreground mt-1">
                     {new Date(s.created_at).toLocaleDateString()}
@@ -233,9 +278,10 @@ function SnapshotsPage() {
             <div className="space-y-1.5">
               <label className="text-xs font-mono uppercase text-muted-foreground">Architecture Version</label>
               <select
-                value={selectedVersionId}
+                value={selectedVersionId || (versions[0]?.id ?? "")}
                 onChange={(e) => setSelectedVersionId(e.target.value)}
                 className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs font-mono"
+                required
               >
                 {versions.map((v) => (
                   <option key={v.id} value={v.id}>
@@ -243,6 +289,29 @@ function SnapshotsPage() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-mono uppercase text-muted-foreground">Snapshot Type</label>
+              <select
+                value={snapshotType}
+                onChange={(e) => setSnapshotType(e.target.value as any)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs font-mono"
+              >
+                <option value="milestone">Milestone</option>
+                <option value="sprint">Sprint</option>
+                <option value="beta">Beta</option>
+                <option value="production">Production</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-mono uppercase text-muted-foreground">Description (Optional)</label>
+              <Input
+                placeholder="e.g. Baseline snapshot before refactoring auth services"
+                value={snapshotDescription}
+                onChange={(e) => setSnapshotDescription(e.target.value)}
+                className="font-mono text-xs"
+              />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>

@@ -17,6 +17,7 @@ import {
   FileCode2,
   Database,
   Terminal,
+  ShieldCheck,
 } from "lucide-react";
 
 type Cmd = {
@@ -31,6 +32,7 @@ type Cmd = {
 
 const COMMANDS: Cmd[] = [
   { id: "n1", label: "Go to Dashboard", group: "Navigate", icon: LayoutDashboard, to: "/", hint: "G D" },
+  { id: "n-quality", label: "Release Quality & Readiness", group: "Navigate", icon: ShieldCheck, to: "/quality", hint: "G Q" },
   { id: "n2", label: "Open Workspace", group: "Navigate", icon: Workflow, to: "/workspace", hint: "G W" },
   { id: "n3", label: "Architecture", group: "Navigate", icon: Network, to: "/architecture" },
   { id: "n4", label: "Repository", group: "Navigate", icon: GitBranch, to: "/repository" },

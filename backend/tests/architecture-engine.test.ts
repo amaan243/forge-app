@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { repository, projectRepository, engineeringRepository } = vi.hoisted(() => ({ repository: {
-  version: vi.fn(), latest: vi.fn(), versions: vi.fn(), createVersion: vi.fn(), updateVersion: vi.fn(), deleteVersion: vi.fn(), nodes: vi.fn(), node: vi.fn(), createNode: vi.fn(), updateNode: vi.fn(), deleteNode: vi.fn(), edges: vi.fn(), edge: vi.fn(), createEdge: vi.fn(), updateEdge: vi.fn(), deleteEdge: vi.fn(), createTimelineEvent: vi.fn(),
+  version: vi.fn(), latest: vi.fn(), versions: vi.fn(), createVersion: vi.fn(), updateVersion: vi.fn(), deleteVersion: vi.fn(), nodes: vi.fn(), node: vi.fn(), createNode: vi.fn(), updateNode: vi.fn(), deleteNode: vi.fn(), edges: vi.fn(), edge: vi.fn(), createEdge: vi.fn(), updateEdge: vi.fn(), deleteEdge: vi.fn(), createTimelineEvent: vi.fn(), createSnapshot: vi.fn(), snapshot: vi.fn(), snapshots: vi.fn(),
 }, projectRepository: { findById: vi.fn(), requirements: vi.fn() }, engineeringRepository: { markDocumentsOutdated: vi.fn().mockResolvedValue(undefined) } }));
 vi.mock("../src/repositories/architecture-repository.js", () => ({ architectureRepository: repository }));
 vi.mock("../src/repositories/project-repository.js", () => ({ projectRepository }));
@@ -9,6 +9,8 @@ vi.mock("../src/repositories/engineering-intelligence-repository.js", () => ({ e
 
 import { ArchitectureGeneratorService } from "../src/services/architecture-generator-service.js";
 import { architectureService } from "../src/services/architecture-service.js";
+import { snapshotService } from "../src/services/snapshot-service.js";
+import { snapshotCreate } from "../src/validators/architecture.js";
 import { VersionComparisonService } from "../src/services/version-comparison-service.js";
 import { DeterministicArchitectureGenerator } from "../src/services/deterministic-architecture-generator.js";
 import type { AIProvider } from "../src/integrations/ai-provider.js";
@@ -168,5 +170,114 @@ describe("architecture engine", () => {
     expect(repository.createNode).toHaveBeenCalledTimes(2);
     expect(repository.createEdge).toHaveBeenCalledTimes(1);
     expect(result.version_number).toBe(2);
+  });
+
+  describe("architecture snapshots", () => {
+    it("validates snapshot creation payload with version_id and defaults type to milestone", () => {
+      const parsedWithVersionId = snapshotCreate.parse({
+        name: "Release 1.0 Milestone",
+        version_id: "00000000-0000-0000-0000-000000000001",
+      });
+      expect(parsedWithVersionId.architecture_version_id).toBe("00000000-0000-0000-0000-000000000001");
+      expect(parsedWithVersionId.type).toBe("milestone");
+      expect(parsedWithVersionId.name).toBe("Release 1.0 Milestone");
+
+      const parsedWithArchVersionId = snapshotCreate.parse({
+        name: "Beta 2.0 Checkpoint",
+        architecture_version_id: "00000000-0000-0000-0000-000000000002",
+        type: "beta",
+        description: "Before database migration",
+      });
+      expect(parsedWithArchVersionId.architecture_version_id).toBe("00000000-0000-0000-0000-000000000002");
+      expect(parsedWithArchVersionId.type).toBe("beta");
+      expect(parsedWithArchVersionId.description).toBe("Before database migration");
+    });
+
+    it("rejects snapshot creation payload when both version_id and architecture_version_id are missing", () => {
+      expect(() =>
+        snapshotCreate.parse({
+          name: "Invalid Snapshot",
+        })
+      ).toThrow();
+    });
+
+    it("creates snapshot successfully capturing version nodes and edges", async () => {
+      const versionId = "00000000-0000-0000-0000-000000000001";
+      repository.version.mockResolvedValue({
+        id: versionId,
+        project_id: "project-1",
+        name: "Baseline v1",
+        architecture_data: {},
+      });
+      repository.nodes.mockResolvedValue([
+        { id: "n1", node_key: "api", name: "API Gateway", type: "api", position_x: 0, position_y: 0, metadata: {} },
+        { id: "n2", node_key: "db", name: "PostgreSQL", type: "database", position_x: 100, position_y: 100, metadata: {} },
+      ]);
+      repository.edges.mockResolvedValue([
+        { source_node_id: "n1", target_node_id: "n2", relationship: "reads", metadata: {} },
+      ]);
+      repository.createSnapshot.mockImplementation((input: any) =>
+        Promise.resolve({ id: "snap-1", created_at: new Date().toISOString(), ...input })
+      );
+
+      const parsed = snapshotCreate.parse({
+        name: "Sprint 5 Checkpoint",
+        version_id: versionId,
+      });
+
+      const snapshot = await snapshotService.create("project-1", "user-1", parsed);
+
+      expect(repository.createSnapshot).toHaveBeenCalledWith(
+        expect.objectContaining({
+          project_id: "project-1",
+          architecture_version_id: versionId,
+          name: "Sprint 5 Checkpoint",
+          type: "milestone",
+          created_by: "user-1",
+          snapshot_data: expect.objectContaining({
+            name: "Baseline v1",
+            nodes: expect.arrayContaining([expect.objectContaining({ node_key: "api" })]),
+            edges: expect.arrayContaining([expect.objectContaining({ source_node_key: "api", target_node_key: "db" })]),
+          }),
+        })
+      );
+      expect(snapshot.id).toBe("snap-1");
+      expect(repository.createTimelineEvent).toHaveBeenCalled();
+    });
+
+    it("restores architecture snapshot into a new architecture version", async () => {
+      const snapshotId = "00000000-0000-0000-0000-000000000099";
+      repository.snapshot.mockResolvedValue({
+        id: snapshotId,
+        project_id: "project-1",
+        name: "Milestone v1",
+        description: "Initial milestone",
+        snapshot_data: {
+          nodes: [{ node_key: "auth", name: "Auth Service", type: "auth", position_x: 0, position_y: 0 }],
+          edges: [],
+        },
+      });
+
+      // Mock createVersion in architectureService
+      repository.latest.mockResolvedValue({ version_number: 1 });
+      repository.createVersion.mockResolvedValue({ id: "new-v2", version_number: 2, status: "draft" });
+      repository.createNode.mockResolvedValue({ id: "new-node-1", node_key: "auth" });
+
+      const restoredVersion = await snapshotService.restore("project-1", "user-1", snapshotId);
+
+      expect(restoredVersion).toBeDefined();
+      expect(repository.createVersion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Milestone v1 (restored)",
+          project_id: "project-1",
+        })
+      );
+      expect(repository.createNode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          architecture_version_id: "new-v2",
+          node_key: "auth",
+        })
+      );
+    });
   });
 });
