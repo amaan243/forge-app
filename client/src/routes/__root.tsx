@@ -96,8 +96,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "theme-color", content: "#070B14" },
     ],
     links: [
+      { rel: "icon", href: "/favicon.ico", sizes: "any" },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      { rel: "apple-touch-icon", href: "/brand/archforge-mark.svg" },
       {
         rel: "stylesheet",
         href: appCss,

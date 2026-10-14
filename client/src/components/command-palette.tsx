@@ -39,7 +39,7 @@ type Cmd = {
 };
 
 const BASE_COMMANDS: Cmd[] = [
-  { id: "n1", label: "Go to Dashboard", group: "Navigate", icon: LayoutDashboard, to: "/", hint: "G D" },
+  { id: "n1", label: "Go to Dashboard", group: "Navigate", icon: LayoutDashboard, to: "/dashboard", hint: "G D" },
   { id: "n-quality", label: "Release Quality & Readiness", group: "Navigate", icon: ShieldCheck, to: "/quality", hint: "G Q" },
   { id: "n2", label: "Open Workspace", group: "Navigate", icon: Workflow, to: "/workspace", hint: "G W" },
   { id: "n3", label: "Architecture", group: "Navigate", icon: Network, to: "/architecture" },

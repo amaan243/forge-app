@@ -1,20 +1,10 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
+import { ArchForgeLogo } from "@/components/brand-logo";
 
 export function AuthLogo() {
   return (
-    <div className="flex items-center gap-2">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <rect x="2.5" y="2.5" width="6" height="6" stroke="currentColor" strokeWidth="1.25" className="text-muted-foreground" />
-        <rect x="15.5" y="2.5" width="6" height="6" stroke="currentColor" strokeWidth="1.25" className="text-muted-foreground" />
-        <rect x="2.5" y="15.5" width="6" height="6" stroke="currentColor" strokeWidth="1.25" className="text-muted-foreground" />
-        <rect x="15.5" y="15.5" width="6" height="6" stroke="currentColor" strokeWidth="1.25" className="text-primary" fill="currentColor" fillOpacity="0.15" />
-        <path d="M8.5 5.5h7M5.5 8.5v7M18.5 8.5v7M8.5 18.5h7" stroke="currentColor" strokeWidth="1.25" className="text-border" />
-      </svg>
-      <span className="font-display font-semibold text-base tracking-tight">
-        Arch<span className="text-primary">Forge</span>
-      </span>
-    </div>
+    <ArchForgeLogo size="md" />
   );
 }
 
@@ -156,11 +146,23 @@ export function OrDivider({ label = "or continue with" }: { label?: string }) {
   );
 }
 
-export function OAuthButton({ label, icon }: { label: string; icon: ReactNode }) {
+export function OAuthButton({
+  label,
+  icon,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  icon: ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
-      className="h-9 flex items-center justify-center gap-2 rounded border border-border bg-background hover:bg-surface/60 transition-colors text-sm w-full"
+      onClick={onClick}
+      disabled={disabled}
+      className="h-9 flex items-center justify-center gap-2 rounded border border-border bg-background hover:bg-surface/60 transition-colors text-sm w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {icon} <span>{label}</span>
     </button>

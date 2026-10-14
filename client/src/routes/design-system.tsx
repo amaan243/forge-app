@@ -17,6 +17,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ArchForgeLogo } from "@/components/brand-logo";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -153,18 +154,7 @@ function NavLink({ children, active }: { children: React.ReactNode; active?: boo
 
 function Logo() {
   return (
-    <div className="flex items-center gap-2">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <rect x="2.5" y="2.5" width="6" height="6" stroke="currentColor" strokeWidth="1.25" className="text-muted-foreground" />
-        <rect x="15.5" y="2.5" width="6" height="6" stroke="currentColor" strokeWidth="1.25" className="text-muted-foreground" />
-        <rect x="2.5" y="15.5" width="6" height="6" stroke="currentColor" strokeWidth="1.25" className="text-muted-foreground" />
-        <rect x="15.5" y="15.5" width="6" height="6" stroke="currentColor" strokeWidth="1.25" className="text-primary" fill="currentColor" fillOpacity="0.15" />
-        <path d="M8.5 5.5h7M5.5 8.5v7M18.5 8.5v7M8.5 18.5h7" stroke="currentColor" strokeWidth="1.25" className="text-border" />
-      </svg>
-      <span className="font-display font-semibold text-sm tracking-tight">
-        Arch<span className="text-primary">Forge</span>
-      </span>
-    </div>
+    <ArchForgeLogo size="md" />
   );
 }
 

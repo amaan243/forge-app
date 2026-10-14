@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { Loader2, ArrowRight, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AuthLayout, AuthCard, AuthField, OrDivider, OAuthButton, GitHubMark, GoogleMark } from "@/components/auth-shell";
+import { AuthLayout, AuthCard, AuthField, OrDivider, OAuthButton, GoogleMark } from "@/components/auth-shell";
 import { useAuth } from "@/lib/auth-context";
+import { authApi } from "@/api/auth";
 
 export const Route = createFileRoute("/register")({
   head: () => ({
@@ -27,6 +28,7 @@ function RegisterPage() {
   const [role, setRole] = useState("Developer");
   const [accept, setAccept] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const { register, isAuthenticated } = useAuth();
@@ -34,9 +36,27 @@ function RegisterPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate({ to: "/" });
+      navigate({ to: "/dashboard" });
     }
   }, [isAuthenticated, navigate]);
+
+  async function handleGoogleSignUp() {
+    setOauthLoading(true);
+    setErr(null);
+    try {
+      const redirectUrl = `${window.location.origin}/login`;
+      const res = await authApi.getGoogleOAuthUrl(redirectUrl);
+      if (res.url) {
+        window.location.href = res.url;
+      } else {
+        setErr("Could not retrieve Google sign in link.");
+        setOauthLoading(false);
+      }
+    } catch (e: any) {
+      setErr(e.response?.data?.message || e.message || "Failed to initialize Google sign in.");
+      setOauthLoading(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -67,7 +87,7 @@ function RegisterPage() {
 
     if (res.success) {
       if (res.isEmailVerified) {
-        navigate({ to: "/" });
+        navigate({ to: "/dashboard" });
       } else {
         navigate({
           to: "/verify-email",
@@ -172,10 +192,12 @@ function RegisterPage() {
           </Button>
         </form>
         <OrDivider />
-        <div className="grid grid-cols-2 gap-2">
-          <OAuthButton label="GitHub" icon={<GitHubMark />} />
-          <OAuthButton label="Google" icon={<GoogleMark />} />
-        </div>
+        <OAuthButton
+          label={oauthLoading ? "Connecting to Google..." : "Google"}
+          icon={oauthLoading ? <Loader2 className="animate-spin h-3.5 w-3.5" /> : <GoogleMark />}
+          onClick={handleGoogleSignUp}
+          disabled={loading || oauthLoading}
+        />
         <div className="text-center text-xs text-muted-foreground">
           Already have an account? <Link to="/login" className="text-primary hover:underline">Sign in</Link>
         </div>

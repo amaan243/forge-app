@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 56" fill="none" width="100%" height="100%" role="img" aria-label="ArchForge Brand Logo">
+  <defs>
+    <linearGradient id="af-logo-strut-left" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF" />
+      <stop offset="50%" stop-color="#0284C7" />
+      <stop offset="100%" stop-color="#0F172A" />
+    </linearGradient>
+    <linearGradient id="af-logo-strut-right" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="50%" stop-color="#0369A1" />
+      <stop offset="100%" stop-color="#090D1A" />
+    </linearGradient>
+    <linearGradient id="af-logo-forge" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00F0FF" />
+      <stop offset="100%" stop-color="#38BDF8" />
+    </linearGradient>
+  </defs>
+
+  <!-- Left Mark (scaled to 44x44 at x=6, y=6) -->
+  <g transform="translate(6, 6) scale(0.6875)">
+    <path d="M32 6 L12 52 L20 56 L32 24 Z" fill="url(#af-logo-strut-left)" />
+    <path d="M32 6 L32 24 L44 56 L52 52 Z" fill="url(#af-logo-strut-right)" />
+    <path d="M19 40 L45 40 L43 45 L21 45 Z" fill="#0284C7" />
+    <line x1="32" y1="13" x2="32" y2="32" stroke="#00F0FF" stroke-width="2.5" stroke-linecap="round" />
+    <line x1="32" y1="32" x2="21" y2="48" stroke="#38BDF8" stroke-width="2" stroke-linecap="round" />
+    <line x1="32" y1="32" x2="43" y2="48" stroke="#10B981" stroke-width="2" stroke-linecap="round" />
+    <circle cx="32" cy="11" r="5" fill="#0F172A" stroke="#00F0FF" stroke-width="2.5" />
+    <circle cx="32" cy="11" r="2.5" fill="#00F0FF" />
+    <circle cx="21" cy="48" r="4" fill="#0F172A" stroke="#38BDF8" stroke-width="2" />
+    <circle cx="21" cy="48" r="1.8" fill="#38BDF8" />
+    <circle cx="43" cy="48" r="4" fill="#0F172A" stroke="#10B981" stroke-width="2" />
+    <circle cx="43" cy="48" r="1.8" fill="#10B981" />
+    <polygon points="32,27 37,32 32,37 27,32" fill="#FFFFFF" />
+  </g>
+
+  <!-- Wordmark Text -->
+  <g transform="translate(56, 33)">
+    <text font-family="'Geist', 'Inter', -apple-system, sans-serif" font-size="24" font-weight="700" letter-spacing="-0.6px">
+      <tspan fill="#F8FAFC">Arch</tspan><tspan fill="url(#af-logo-forge)">Forge</tspan>
+    </text>
+  </g>
+
+  <!-- Tagline Subtitle -->
+  <g transform="translate(57, 46)">
+    <text font-family="'JetBrains Mono', monospace" font-size="8" font-weight="600" letter-spacing="1.6px" fill="#64748B">
+      ENGINEERING WORKSTATION
+    </text>
+  </g>
+</svg>

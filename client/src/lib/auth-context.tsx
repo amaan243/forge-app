@@ -21,6 +21,8 @@ interface AuthContextType {
   error: string | null;
   login: (payload: LoginPayload) => Promise<{ success: boolean; error?: string; emailNotVerified?: boolean; email?: string }>;
   register: (payload: RegisterPayload) => Promise<{ success: boolean; error?: string; isEmailVerified?: boolean }>;
+  loginWithToken: (accessToken: string, refreshToken?: string) => Promise<boolean>;
+  exchangeOAuthCode: (code: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -142,6 +144,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loginWithToken = async (accessToken: string, refreshToken?: string) => {
+    try {
+      localStorage.setItem(TOKEN_KEY, accessToken);
+      if (refreshToken) {
+        localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+      }
+      const res = await authApi.getMe();
+      if (res.success && res.data?.user) {
+        setUser(res.data.user);
+        localStorage.setItem(USER_KEY, JSON.stringify(res.data.user));
+        return true;
+      }
+      return false;
+    } catch {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      setUser(null);
+      return false;
+    }
+  };
+
+  const exchangeOAuthCode = async (code: string) => {
+    try {
+      const res = await authApi.exchangeOAuthCode({ code });
+      if (res.success && res.data?.session?.accessToken && res.data.user) {
+        localStorage.setItem(TOKEN_KEY, res.data.session.accessToken);
+        if (res.data.session.refreshToken) {
+          localStorage.setItem(REFRESH_TOKEN_KEY, res.data.session.refreshToken);
+        }
+        localStorage.setItem(USER_KEY, JSON.stringify(res.data.user));
+        setUser(res.data.user);
+        return { success: true };
+      }
+      return { success: false, error: res.message || "Failed to complete authentication" };
+    } catch (err: any) {
+      const message = err.response?.data?.message || err.message || "Failed to exchange OAuth code";
+      return { success: false, error: message };
+    }
+  };
+
   const logout = async () => {
     try {
       await authApi.logout();
@@ -177,6 +220,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error,
         login,
         register,
+        loginWithToken,
+        exchangeOAuthCode,
         logout,
         refreshUser,
       }}

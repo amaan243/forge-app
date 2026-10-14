@@ -17,7 +17,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DesignSystemRouteImport } from './routes/design-system'
 import { Route as AppRouteImport } from './routes/_app'
-import { Route as AppIndexRouteImport } from './routes/_app.index'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppWorkspaceRouteImport } from './routes/_app.workspace'
 import { Route as AppWorkflowRouteImport } from './routes/_app.workflow'
 import { Route as AppVersionsRouteImport } from './routes/_app.versions'
@@ -34,6 +34,7 @@ import { Route as AppExportsRouteImport } from './routes/_app.exports'
 import { Route as AppDriftRouteImport } from './routes/_app.drift'
 import { Route as AppDocumentationRouteImport } from './routes/_app.documentation'
 import { Route as AppDependenciesRouteImport } from './routes/_app.dependencies'
+import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppCompareRouteImport } from './routes/_app.compare'
 import { Route as AppArchitectureRouteImport } from './routes/_app.architecture'
 import { Route as AppAnalyticsRouteImport } from './routes/_app.analytics'
@@ -77,10 +78,10 @@ const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppIndexRoute = AppIndexRouteImport.update({
+const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppWorkspaceRoute = AppWorkspaceRouteImport.update({
   id: '/workspace',
@@ -162,6 +163,11 @@ const AppDependenciesRoute = AppDependenciesRouteImport.update({
   path: '/dependencies',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDashboardRoute = AppDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppCompareRoute = AppCompareRouteImport.update({
   id: '/compare',
   path: '/compare',
@@ -179,7 +185,7 @@ const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AppIndexRoute
+  '/': typeof IndexRoute
   '/design-system': typeof DesignSystemRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -190,6 +196,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
   '/compare': typeof AppCompareRoute
+  '/dashboard': typeof AppDashboardRoute
   '/dependencies': typeof AppDependenciesRoute
   '/documentation': typeof AppDocumentationRoute
   '/drift': typeof AppDriftRoute
@@ -208,6 +215,7 @@ export interface FileRoutesByFullPath {
   '/workspace': typeof AppWorkspaceRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof IndexRoute
   '/design-system': typeof DesignSystemRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -218,6 +226,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AppAnalyticsRoute
   '/architecture': typeof AppArchitectureRoute
   '/compare': typeof AppCompareRoute
+  '/dashboard': typeof AppDashboardRoute
   '/dependencies': typeof AppDependenciesRoute
   '/documentation': typeof AppDocumentationRoute
   '/drift': typeof AppDriftRoute
@@ -234,10 +243,10 @@ export interface FileRoutesByTo {
   '/versions': typeof AppVersionsRoute
   '/workflow': typeof AppWorkflowRoute
   '/workspace': typeof AppWorkspaceRoute
-  '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/design-system': typeof DesignSystemRoute
   '/forgot-password': typeof ForgotPasswordRoute
@@ -249,6 +258,7 @@ export interface FileRoutesById {
   '/_app/analytics': typeof AppAnalyticsRoute
   '/_app/architecture': typeof AppArchitectureRoute
   '/_app/compare': typeof AppCompareRoute
+  '/_app/dashboard': typeof AppDashboardRoute
   '/_app/dependencies': typeof AppDependenciesRoute
   '/_app/documentation': typeof AppDocumentationRoute
   '/_app/drift': typeof AppDriftRoute
@@ -265,7 +275,6 @@ export interface FileRoutesById {
   '/_app/versions': typeof AppVersionsRoute
   '/_app/workflow': typeof AppWorkflowRoute
   '/_app/workspace': typeof AppWorkspaceRoute
-  '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -281,6 +290,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/architecture'
     | '/compare'
+    | '/dashboard'
     | '/dependencies'
     | '/documentation'
     | '/drift'
@@ -299,6 +309,7 @@ export interface FileRouteTypes {
     | '/workspace'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/design-system'
     | '/forgot-password'
     | '/login'
@@ -309,6 +320,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/architecture'
     | '/compare'
+    | '/dashboard'
     | '/dependencies'
     | '/documentation'
     | '/drift'
@@ -325,9 +337,9 @@ export interface FileRouteTypes {
     | '/versions'
     | '/workflow'
     | '/workspace'
-    | '/'
   id:
     | '__root__'
+    | '/'
     | '/_app'
     | '/design-system'
     | '/forgot-password'
@@ -339,6 +351,7 @@ export interface FileRouteTypes {
     | '/_app/analytics'
     | '/_app/architecture'
     | '/_app/compare'
+    | '/_app/dashboard'
     | '/_app/dependencies'
     | '/_app/documentation'
     | '/_app/drift'
@@ -355,10 +368,10 @@ export interface FileRouteTypes {
     | '/_app/versions'
     | '/_app/workflow'
     | '/_app/workspace'
-    | '/_app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   DesignSystemRoute: typeof DesignSystemRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
@@ -427,12 +440,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/': {
-      id: '/_app/'
+    '/': {
+      id: '/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof AppIndexRouteImport
-      parentRoute: typeof AppRoute
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/workspace': {
       id: '/_app/workspace'
@@ -546,6 +559,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDependenciesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/dashboard': {
+      id: '/_app/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AppDashboardRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/compare': {
       id: '/_app/compare'
       path: '/compare'
@@ -574,6 +594,7 @@ interface AppRouteChildren {
   AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppArchitectureRoute: typeof AppArchitectureRoute
   AppCompareRoute: typeof AppCompareRoute
+  AppDashboardRoute: typeof AppDashboardRoute
   AppDependenciesRoute: typeof AppDependenciesRoute
   AppDocumentationRoute: typeof AppDocumentationRoute
   AppDriftRoute: typeof AppDriftRoute
@@ -590,13 +611,13 @@ interface AppRouteChildren {
   AppVersionsRoute: typeof AppVersionsRoute
   AppWorkflowRoute: typeof AppWorkflowRoute
   AppWorkspaceRoute: typeof AppWorkspaceRoute
-  AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppAnalyticsRoute: AppAnalyticsRoute,
   AppArchitectureRoute: AppArchitectureRoute,
   AppCompareRoute: AppCompareRoute,
+  AppDashboardRoute: AppDashboardRoute,
   AppDependenciesRoute: AppDependenciesRoute,
   AppDocumentationRoute: AppDocumentationRoute,
   AppDriftRoute: AppDriftRoute,
@@ -613,12 +634,12 @@ const AppRouteChildren: AppRouteChildren = {
   AppVersionsRoute: AppVersionsRoute,
   AppWorkflowRoute: AppWorkflowRoute,
   AppWorkspaceRoute: AppWorkspaceRoute,
-  AppIndexRoute: AppIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   DesignSystemRoute: DesignSystemRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,

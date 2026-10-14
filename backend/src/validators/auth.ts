@@ -35,3 +35,7 @@ export const resetPasswordSchema = z.object({
   token_hash: z.string().optional(),
   type: z.string().optional().default("recovery"),
 });
+
+export const exchangeCodeSchema = z.object({
+  code: z.string().min(1, "Authorization code is required"),
+});

@@ -58,7 +58,7 @@ function VerifyEmailPage() {
         localStorage.setItem("archforge_token", hashToken);
         setVerified(true);
         refreshUser().then(() => {
-          setTimeout(() => navigate({ to: "/" }), 1200);
+          setTimeout(() => navigate({ to: "/dashboard" }), 1200);
         });
         return;
       }
@@ -86,7 +86,7 @@ function VerifyEmailPage() {
             refreshUser();
             toast.success("Email verified successfully! Welcome to ArchForge.");
             setTimeout(() => {
-              navigate({ to: "/" });
+              navigate({ to: "/dashboard" });
             }, 1200);
           } else {
             setVerifyError(res.message || "Verification failed");

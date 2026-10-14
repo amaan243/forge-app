@@ -118,7 +118,7 @@ function OnboardingPage() {
               Continue <ArrowRight />
             </Button>
           ) : (
-            <Button size="sm" onClick={() => navigate({ to: "/" })}>
+            <Button size="sm" onClick={() => navigate({ to: "/dashboard" })}>
               Enter workspace <ArrowRight />
             </Button>
           )}

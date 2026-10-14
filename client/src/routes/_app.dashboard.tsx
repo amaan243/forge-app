@@ -38,7 +38,7 @@ import { getProjectAuditEvents, type AuditEvent } from "@/api/exports";
 import { getArchitectureVersions } from "@/api/architecture";
 import { getNotifications, type AppNotification } from "@/api/notifications";
 
-export const Route = createFileRoute("/_app/")({
+export const Route = createFileRoute("/_app/dashboard")({
   head: () => ({
     meta: [
       { title: "Dashboard — ArchForge" },

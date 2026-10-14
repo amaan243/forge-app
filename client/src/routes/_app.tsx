@@ -48,6 +48,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
 import { ProjectSwitcher } from "@/components/project-switcher";
+import { ArchForgeLogo } from "@/components/brand-logo";
 
 export const Route = createFileRoute("/_app")({
   component: AppShell,
@@ -56,6 +57,7 @@ export const Route = createFileRoute("/_app")({
 export interface NavItem {
   to:
     | "/"
+    | "/dashboard"
     | "/quality"
     | "/workspace"
     | "/architecture"
@@ -93,7 +95,7 @@ export const NAVIGATION_GROUPS: NavGroup[] = [
     label: "Overview",
     icon: LayoutDashboard,
     items: [
-      { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
+      { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
     ],
   },
   {
@@ -164,7 +166,7 @@ function AppShell() {
   const { currentWorkspace } = useWorkspace();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const crumbs = pathname === "/" ? ["dashboard"] : pathname.split("/").filter(Boolean);
+  const crumbs = (pathname === "/" || pathname === "/dashboard") ? ["dashboard"] : pathname.split("/").filter(Boolean);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
@@ -485,18 +487,7 @@ function AppShell() {
 
 function Logo() {
   return (
-    <div className="flex items-center gap-2">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <rect x="2.5" y="2.5" width="6" height="6" stroke="currentColor" strokeWidth="1.25" className="text-muted-foreground" />
-        <rect x="15.5" y="2.5" width="6" height="6" stroke="currentColor" strokeWidth="1.25" className="text-muted-foreground" />
-        <rect x="2.5" y="15.5" width="6" height="6" stroke="currentColor" strokeWidth="1.25" className="text-muted-foreground" />
-        <rect x="15.5" y="15.5" width="6" height="6" stroke="currentColor" strokeWidth="1.25" className="text-primary" fill="currentColor" fillOpacity="0.15" />
-        <path d="M8.5 5.5h7M5.5 8.5v7M18.5 8.5v7M8.5 18.5h7" stroke="currentColor" strokeWidth="1.25" className="text-border" />
-      </svg>
-      <span className="font-display font-semibold text-sm tracking-tight">
-        Arch<span className="text-primary">Forge</span>
-      </span>
-    </div>
+    <ArchForgeLogo size="sm" asLink href="/dashboard" />
   );
 }
 

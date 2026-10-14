@@ -9,6 +9,7 @@ import {
   verifyEmailSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  exchangeCodeSchema,
 } from "../validators/auth.js";
 import type { AuthenticatedRequest } from "../types/api.js";
 import type { AuthResponseData, AuthUser } from "../types/auth.js";
@@ -415,17 +416,165 @@ export const authController = {
     throw new AppError("Authentication credentials missing for password reset.", 400, "MISSING_CREDENTIALS");
   }) as RequestHandler,
 
+  getOAuthUrl: (async (request, response) => {
+    const provider = (request.params.provider || request.query.provider || "google") as string;
+    const redirectTo = (request.query.redirectTo as string) || `${env.CLIENT_URL}/login`;
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: provider as "google",
+      options: {
+        redirectTo,
+      },
+    });
+
+    if (error || !data?.url) {
+      throw new AppError(error?.message || "Failed to initialize OAuth provider", 400, "OAUTH_INIT_FAILED");
+    }
+
+    if (request.accepts("html") && !request.accepts("json")) {
+      return response.redirect(data.url);
+    }
+
+    return response.json({
+      success: true,
+      message: "OAuth URL generated",
+      data: {
+        provider,
+        url: data.url,
+      },
+    });
+  }) as RequestHandler,
+
+  exchangeOAuthCode: (async (request, response) => {
+    const { code } = exchangeCodeSchema.parse(request.body);
+
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (error || !data.user || !data.session) {
+      throw new UnauthorizedError(error?.message || "Invalid or expired authorization code.");
+    }
+
+    // Ensure profile row exists
+    let profileFullName: string | null = null;
+    let profileAvatarUrl: string | null = null;
+    try {
+      const { data: profile } = await supabaseAdmin.from("profiles").select().eq("id", data.user.id).single();
+      if (profile) {
+        profileFullName = profile.full_name;
+        profileAvatarUrl = profile.avatar_url;
+      } else {
+        const fullName =
+          (data.user.user_metadata?.full_name as string) ||
+          (data.user.user_metadata?.name as string) ||
+          null;
+        const avatarUrl =
+          (data.user.user_metadata?.avatar_url as string) ||
+          (data.user.user_metadata?.picture as string) ||
+          null;
+        const { data: createdProfile } = await supabaseAdmin
+          .from("profiles")
+          .upsert(
+            {
+              id: data.user.id,
+              full_name: fullName,
+              avatar_url: avatarUrl,
+            },
+            { onConflict: "id" }
+          )
+          .select()
+          .single();
+        if (createdProfile) {
+          profileFullName = createdProfile.full_name;
+          profileAvatarUrl = createdProfile.avatar_url;
+        }
+      }
+    } catch {
+      // Non-blocking
+    }
+
+    const user: AuthUser = {
+      id: data.user.id,
+      email: data.user.email ?? "",
+      full_name:
+        profileFullName ||
+        (data.user.user_metadata?.full_name as string) ||
+        (data.user.user_metadata?.name as string) ||
+        null,
+      role: (data.user.user_metadata?.role as string) || "Developer",
+      company: (data.user.user_metadata?.company as string) || null,
+      avatar_url:
+        profileAvatarUrl ||
+        (data.user.user_metadata?.avatar_url as string) ||
+        (data.user.user_metadata?.picture as string) ||
+        null,
+      isEmailVerified: true,
+    };
+
+    return response.json({
+      success: true,
+      message: "OAuth authentication successful",
+      data: {
+        user,
+        session: {
+          accessToken: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+          expiresAt: data.session.expires_at,
+          expiresIn: data.session.expires_in,
+        },
+        isEmailVerified: true,
+      },
+    });
+  }) as RequestHandler,
+
   me: (async (request, response) => {
     const authReq = request as unknown as AuthenticatedRequest;
-    const { data: profile } = await supabaseAdmin.from("profiles").select().eq("id", authReq.userId).single();
+    let { data: profile } = await supabaseAdmin.from("profiles").select().eq("id", authReq.userId).single();
+
+    if (!profile) {
+      const fullName =
+        (authReq.user.userMetadata?.full_name as string) ||
+        (authReq.user.userMetadata?.name as string) ||
+        null;
+      const avatarUrl =
+        (authReq.user.userMetadata?.avatar_url as string) ||
+        (authReq.user.userMetadata?.picture as string) ||
+        null;
+      try {
+        const { data: createdProfile } = await supabaseAdmin
+          .from("profiles")
+          .upsert(
+            {
+              id: authReq.userId,
+              full_name: fullName,
+              avatar_url: avatarUrl,
+            },
+            { onConflict: "id" }
+          )
+          .select()
+          .single();
+        if (createdProfile) {
+          profile = createdProfile;
+        }
+      } catch {
+        // Non-blocking
+      }
+    }
 
     const user: AuthUser = {
       id: authReq.userId,
       email: authReq.user.email ?? "",
-      full_name: profile?.full_name || (authReq.user.userMetadata?.full_name as string) || null,
+      full_name:
+        profile?.full_name ||
+        (authReq.user.userMetadata?.full_name as string) ||
+        (authReq.user.userMetadata?.name as string) ||
+        null,
       role: (authReq.user.userMetadata?.role as string) || "Developer",
       company: (authReq.user.userMetadata?.company as string) || null,
-      avatar_url: profile?.avatar_url || (authReq.user.userMetadata?.avatar_url as string) || null,
+      avatar_url:
+        profile?.avatar_url ||
+        (authReq.user.userMetadata?.avatar_url as string) ||
+        (authReq.user.userMetadata?.picture as string) ||
+        null,
       isEmailVerified: true,
     };
 
