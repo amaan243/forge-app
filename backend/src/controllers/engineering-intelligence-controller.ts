@@ -370,7 +370,7 @@ export const engineeringController = {
     const architecture = await architectureService.getCurrent(String(request.params.projectId));
     const started = Date.now();
     const run = await aiRunService.start(String(request.params.projectId), userId(request), "design_review", {});
-    const findings = designReviewService.review(architecture);
+    const findings = await designReviewService.reviewWithAI(architecture);
     await aiRunService.complete(run.id, { findingCount: findings.length }, started);
     response.json({ success: true, message: "Design review completed", data: findings });
   }) as RequestHandler,

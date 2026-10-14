@@ -25,6 +25,13 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useWorkspace } from "@/lib/workspace-context";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import {
@@ -36,6 +43,7 @@ import {
   getRepositoryAnalyses,
   getDriftAnalyses,
   getDriftAnalysis,
+  getDriftFinding,
   runDriftAnalysis,
   type DriftAnalysis,
   type DriftItem,
@@ -80,6 +88,25 @@ function DriftPage() {
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+
+  // Finding detail inspection state
+  const [inspectingFindingId, setInspectingFindingId] = useState<string | null>(null);
+  const [inspectingFinding, setInspectingFinding] = useState<DriftItem | null>(null);
+  const [inspectingLoading, setInspectingLoading] = useState(false);
+
+  const handleInspectFinding = async (findingId: string) => {
+    if (!currentProject || !activeDrift?.id) return;
+    setInspectingFindingId(findingId);
+    setInspectingLoading(true);
+    try {
+      const data = await getDriftFinding(currentProject.id, activeDrift.id, findingId);
+      setInspectingFinding(data);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || "Failed to load drift finding details");
+    } finally {
+      setInspectingLoading(false);
+    }
+  };
 
   // Project change reset & stale request cancellation
   useEffect(() => {
@@ -695,6 +722,7 @@ function DriftPage() {
                         item={item}
                         isExpanded={isExpanded}
                         onToggle={() => setExpandedItemId(isExpanded ? null : itemId)}
+                        onInspect={() => handleInspectFinding(item.id || itemId)}
                       />
                     );
                   })}
@@ -808,6 +836,99 @@ function DriftPage() {
           </div>
         )
       )}
+
+      {/* Drift Finding Detail Modal */}
+      <Dialog
+        open={Boolean(inspectingFindingId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setInspectingFindingId(null);
+            setInspectingFinding(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Radar className="h-5 w-5 text-primary" />
+              <span>Drift Finding Evidence & Remediation</span>
+            </DialogTitle>
+            <DialogDescription>
+              Detailed comparison evidence between repository code and architecture specification.
+            </DialogDescription>
+          </DialogHeader>
+
+          {inspectingLoading ? (
+            <div className="p-10 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              Loading finding detail record…
+            </div>
+          ) : inspectingFinding ? (
+            <div className="space-y-4 text-xs">
+              <div className="p-3 rounded border border-border bg-surface/50 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] uppercase text-muted-foreground">Type: {inspectingFinding.type}</span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-primary/10 text-primary font-bold">
+                    {inspectingFinding.severity}
+                  </span>
+                </div>
+                <div className="font-semibold text-sm text-foreground">{inspectingFinding.description}</div>
+              </div>
+
+              {inspectingFinding.recommendation && (
+                <div className="p-3 rounded border border-primary/30 bg-primary/5 space-y-1">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-primary font-semibold">
+                    Recommended Remediation:
+                  </div>
+                  <div className="text-xs text-foreground">{inspectingFinding.recommendation}</div>
+                </div>
+              )}
+
+              {inspectingFinding.metadata?.evidence && inspectingFinding.metadata.evidence.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                    Direct Code Evidence:
+                  </div>
+                  <div className="p-3 rounded border border-border bg-background font-mono text-[11px] space-y-1">
+                    {inspectingFinding.metadata.evidence.map((ev, i) => (
+                      <div key={i} className="flex items-start gap-1.5">
+                        <span className="text-primary">•</span>
+                        <span>{ev}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {inspectingFinding.metadata?.sourceFilePaths && inspectingFinding.metadata.sourceFilePaths.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                    Affected Source Files:
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 font-mono text-[11px]">
+                    {inspectingFinding.metadata.sourceFilePaths.map((fp, i) => (
+                      <span key={i} className="px-2 py-1 rounded border border-border bg-surface">
+                        {fp}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {inspectingFinding.metadata?.confidenceReason && (
+                <div className="text-[11px] text-muted-foreground bg-surface/40 p-2.5 rounded border border-border/50">
+                  <span className="font-semibold text-foreground">Confidence Rationale: </span>
+                  {inspectingFinding.metadata.confidenceReason}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-8 text-center text-xs text-muted-foreground">
+              Finding details could not be loaded.
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -959,10 +1080,12 @@ function DriftItemRow({
   item,
   isExpanded,
   onToggle,
+  onInspect,
 }: {
   item: DriftItem;
   isExpanded: boolean;
   onToggle: () => void;
+  onInspect?: () => void;
 }) {
   const badgeMap: Record<string, { cls: string; label: string }> = {
     missing: { cls: "bg-warning/15 text-warning border-warning/30", label: "Missing" },
@@ -1079,9 +1202,25 @@ function DriftItemRow({
         </div>
       )}
 
-      {/* Recommended Next Step */}
-      <div className="text-xs text-primary font-medium flex items-center gap-1.5 pt-0.5 pl-6">
-        <ArrowRight className="h-3 w-3 shrink-0" /> {item.recommendation}
+      {/* Recommended Next Step & Inspect Action */}
+      <div className="flex items-center justify-between pt-1 pl-6">
+        <div className="text-xs text-primary font-medium flex items-center gap-1.5">
+          <ArrowRight className="h-3 w-3 shrink-0" /> {item.recommendation}
+        </div>
+        {item.id && onInspect && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-[10px] font-mono gap-1"
+            onClick={(e) => {
+              e.stopPropagation();
+              onInspect();
+            }}
+          >
+            <Search className="h-3 w-3" />
+            Inspect Finding
+          </Button>
+        )}
       </div>
     </div>
   );

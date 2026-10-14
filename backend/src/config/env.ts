@@ -14,6 +14,10 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["error", "warn", "info", "http", "verbose", "debug", "silly"]).default("info"),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(200),
+  AI_PROVIDER: z.string().default("none"),
+  GROQ_API_KEY: z.string().optional().default(""),
+  GROQ_MODEL: z.string().default("openai/gpt-oss-20b"),
+  AI_API_KEY: z.string().optional().default(""),
 });
 
 export type Environment = z.infer<typeof envSchema>;

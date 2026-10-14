@@ -8,11 +8,45 @@ import { searchService } from "../services/search-service.js";
 import { settingsService } from "../services/settings-service.js";
 import { platformRepository } from "../repositories/platform-operations-repository.js";
 import { architectureService } from "../services/architecture-service.js";
-import { exportGenerationQueue } from "../jobs/repository-analysis-queue.js";
+import { exportGenerationQueue, isRedisAvailable } from "../jobs/repository-analysis-queue.js";
 const userId = (request: Parameters<RequestHandler>[0]) => (request as unknown as AuthenticatedRequest).userId;
 export const platformController = {
   analytics: (async (request, response) => { response.json({ success: true, message: "Analytics retrieved", data: await analyticsService.get(String(request.params.projectId), analyticsQuery.parse(request.query)) }); }) as RequestHandler,
-  createExport: (async (request, response) => { const input = exportCreate.parse(request.body); const projectId = String(request.params.projectId); const requestedBy = userId(request); const record = await exportService.create(projectId, requestedBy, input.type, input.format); await exportGenerationQueue.add("generate-export", { exportId: record.id, projectId, requestedBy }, { jobId: record.id }); response.status(202).json({ success: true, message: "Export queued", data: record }); }) as RequestHandler,
+  listExports: (async (request, response) => {
+    response.json({ success: true, message: "Exports retrieved", data: await platformRepository.listExports(String(request.params.projectId)) });
+  }) as RequestHandler,
+  createExport: (async (request, response) => {
+    const input = exportCreate.parse(request.body);
+    const projectId = String(request.params.projectId);
+    const requestedBy = userId(request);
+    const record = await exportService.create(projectId, requestedBy, input.type, input.format);
+    const executeExport = async () => {
+      try {
+        await platformRepository.updateExport(record.id, { status: "running" });
+        const data = await architectureService.getCurrent(projectId);
+        await exportService.generate(record.id, data);
+        const reqAny = request as any;
+        const workspaceId = reqAny.project?.workspace_id || "";
+        await notificationService.notify({ user_id: requestedBy, workspace_id: workspaceId, project_id: projectId, type: "export_ready", title: "Export ready", message: `Your ${record.type} export is ready.`, severity: "success", metadata: { export_id: record.id } }).catch(() => undefined);
+      } catch (err) {
+        await platformRepository.updateExport(record.id, { status: "failed", metadata: { error: err instanceof Error ? err.message : "Export failed" }, completed_at: new Date().toISOString() });
+      }
+    };
+    const hasRedis = await isRedisAvailable();
+    if (hasRedis) {
+      try {
+        await Promise.race([
+          exportGenerationQueue.add("generate-export", { exportId: record.id, projectId, requestedBy }, { jobId: record.id }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Queue add timeout")), 1000)),
+        ]);
+      } catch {
+        setImmediate(executeExport);
+      }
+    } else {
+      setImmediate(executeExport);
+    }
+    response.status(202).json({ success: true, message: "Export queued", data: record });
+  }) as RequestHandler,
   getExport: (async (request, response) => { response.json({ success: true, message: "Export retrieved", data: await exportService.get(String(request.params.exportId)) }); }) as RequestHandler,
   notifications: (async (request, response) => { response.json({ success: true, message: "Notifications retrieved", data: await notificationService.list(userId(request)) }); }) as RequestHandler,
   readNotification: (async (request, response) => { const params = notificationParams.parse(request.params); response.json({ success: true, message: "Notification marked read", data: await notificationService.read(userId(request), params.notificationId) }); }) as RequestHandler,

@@ -13,7 +13,7 @@ import { architectureRepository } from "../repositories/architecture-repository.
 import { architectureService } from "../services/architecture-service.js";
 import { driftDetectionService } from "../services/drift-service.js";
 import { DriftRemediationService } from "../services/drift-remediation-service.js";
-import { UnsupportedAIProvider } from "../integrations/ai-provider.js";
+import { getAIProvider } from "../integrations/ai-provider.js";
 import { repositoryAnalysisQueue, isRedisAvailable } from "../jobs/repository-analysis-queue.js";
 import { dependencyAnalyzerService } from "../services/dependency-analyzer-service.js";
 import { NotFoundError, ValidationError } from "../errors/app-error.js";
@@ -298,7 +298,7 @@ export const repositoryIntelligenceController = {
     if (!drift || drift.project_id !== String(request.params.projectId)) {
       throw new NotFoundError("Drift analysis not found");
     }
-    const data = await new DriftRemediationService(new UnsupportedAIProvider()).remediation(drift);
+    const data = await new DriftRemediationService(getAIProvider()).remediation(drift);
     response.json({ success: true, message: "Drift remediation generated", data });
   }) as RequestHandler,
 };

@@ -1,160 +1,450 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { BookOpen, Presentation, Download, Sparkles, ArrowRight } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import {
+  BookOpen,
+  Presentation,
+  Download,
+  Sparkles,
+  ArrowRight,
+  FolderOpen,
+  Loader2,
+  AlertTriangle,
+  RotateCw,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Layers,
+  Cpu,
+  ShieldCheck,
+  CheckCircle2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useWorkspace } from "@/lib/workspace-context";
+import { ProjectSwitcher } from "@/components/project-switcher";
+import {
+  getProjectStory,
+  generateProjectStory,
+  type ProjectStory,
+  type ProjectStoryContent,
+} from "@/api";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/story")({
   head: () => ({
     meta: [
       { title: "Project Story Mode — ArchForge" },
-      { name: "description", content: "One-click presentation summary of the project — designed for demos and placement interviews." },
+      {
+        name: "description",
+        content:
+          "One-click presentation summary of the project — designed for demos, design reviews, and placement interviews.",
+      },
     ],
   }),
   component: StoryPage,
 });
 
-import { useWorkspace } from "@/lib/workspace-context";
-import { ProjectSwitcher } from "@/components/project-switcher";
-
 function StoryPage() {
   const { currentProject } = useWorkspace();
+  const [story, setStory] = useState<ProjectStory | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPresenting, setIsPresenting] = useState(false);
+  const [slideIndex, setSlideIndex] = useState(0);
+
+  const fetchStory = useCallback(async () => {
+    if (!currentProject) {
+      setStory(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getProjectStory(currentProject.id);
+      setStory(data);
+    } catch (err: any) {
+      console.error("Failed to load project story:", err);
+      setError(err.response?.data?.message || err.message || "Failed to load project story");
+    } finally {
+      setLoading(false);
+    }
+  }, [currentProject]);
+
+  useEffect(() => {
+    fetchStory();
+  }, [fetchStory]);
+
+  const handleGenerateStory = async () => {
+    if (!currentProject) {
+      toast.error("Please select a project first.");
+      return;
+    }
+    setGenerating(true);
+    try {
+      const data = await generateProjectStory(currentProject.id);
+      setStory(data);
+      toast.success("Project story generated successfully!");
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || "Failed to generate story";
+      toast.error(msg);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    if (!story) {
+      toast.error("Generate a story first before exporting.");
+      return;
+    }
+    window.print();
+  };
+
+  const content: ProjectStoryContent | undefined = story?.content;
+
+  const slides = [
+    {
+      index: "01",
+      title: "Problem & System Scope",
+      subtitle: content?.currentState || "Current Baseline",
+      body: (
+        <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {content?.problem || "Describe the core business and technical challenges this architecture solves."}
+          </p>
+          <div className="p-3.5 rounded border border-border bg-surface/40 space-y-1">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+              Architecture Baseline
+            </div>
+            <div className="text-sm font-medium">{content?.currentState || "Initial Draft"}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      index: "02",
+      title: "Architecture Topology & Components",
+      subtitle: `${content?.architecture?.length ?? 0} components declared`,
+      body: (
+        <div className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Core components and system topology derived from project requirements:
+          </p>
+          {content?.architecture && content.architecture.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {content.architecture.map((name, i) => (
+                <div key={i} className="p-3 rounded border border-border bg-surface/40 flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-primary" />
+                  <span className="text-xs font-medium truncate">{name}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">No architecture components registered yet.</p>
+          )}
+          {content?.dataFlow && content.dataFlow.length > 0 && (
+            <div className="text-[11px] font-mono text-muted-foreground pt-1">
+              Active Communication Edges: {content.dataFlow.length} modeled relationships.
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      index: "03",
+      title: "Technology Stack & Tooling",
+      subtitle: `${content?.technologyChoices?.length ?? 0} verified technologies`,
+      body: (
+        <div className="space-y-4">
+          {content?.technologyChoices && content.technologyChoices.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {content.technologyChoices.map((tech, i) => (
+                <div key={i} className="surface-panel p-3">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                    Layer {i + 1}
+                  </div>
+                  <div className="text-sm font-medium mt-1">{tech}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">
+              No specific technology choices detected in architecture nodes.
+            </p>
+          )}
+        </div>
+      ),
+    },
+    {
+      index: "04",
+      title: "Key Architectural Decisions",
+      subtitle: "Engineering rationale and invariants",
+      body: (
+        <div className="space-y-3">
+          {content?.importantDecisions && content.importantDecisions.length > 0 ? (
+            <ul className="space-y-2 text-xs text-muted-foreground">
+              {content.importantDecisions.map((dec, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <span>{dec}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <span>Deterministic modular boundaries isolating domains and external integrations.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <span>Zero implicit dependencies; all service relations explicitly modeled in the graph.</span>
+              </div>
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      index: "05",
+      title: "Security, Scaling & Trade-offs",
+      subtitle: "Operational resilience",
+      body: (
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="surface-panel p-3.5 space-y-2">
+            <div className="text-xs font-semibold flex items-center gap-1.5 text-primary">
+              <ShieldCheck className="h-4 w-4" /> Security Invariants
+            </div>
+            <ul className="text-xs text-muted-foreground space-y-1">
+              <li>• Ingress perimeter TLS and token authorization boundary.</li>
+              <li>• Isolated database access using least-privilege credentials.</li>
+            </ul>
+          </div>
+          <div className="surface-panel p-3.5 space-y-2">
+            <div className="text-xs font-semibold flex items-center gap-1.5 text-info">
+              <Cpu className="h-4 w-4" /> Scalability & Resiliency
+            </div>
+            <ul className="text-xs text-muted-foreground space-y-1">
+              <li>• Horizontally scalable stateless compute services.</li>
+              <li>• Managed caching and asynchronous queues for burst absorption.</li>
+            </ul>
+          </div>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div className="space-y-2">
           <div className="text-[11px] font-mono uppercase tracking-wider text-primary flex items-center gap-2">
-            <BookOpen className="h-3.5 w-3.5" /> Project story mode
+            <BookOpen className="h-3.5 w-3.5" /> Project Story Mode
           </div>
           <h1 className="text-3xl font-display font-semibold tracking-tight">
             {currentProject ? currentProject.name : "Engineering Story"}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Generated for demos and placement interviews. Regenerate any section on demand.
+            Synthesized technical story for architecture reviews, demos, and technical interviews.
           </p>
         </div>
         <div className="flex gap-2 items-center flex-wrap">
           <ProjectSwitcher variant="inline" />
-          <Button variant="outline"><Download className="h-3.5 w-3.5 mr-1" /> Export PDF</Button>
-          <Button variant="outline"><Presentation className="h-3.5 w-3.5 mr-1" /> Present</Button>
-          <Button><Sparkles className="h-3.5 w-3.5 mr-1" /> Regenerate</Button>
+          <Button
+            variant="outline"
+            onClick={handleExportPdf}
+            disabled={!story || loading || generating}
+            title="Export story as PDF report"
+          >
+            <Download className="h-3.5 w-3.5 mr-1" /> Export PDF
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSlideIndex(0);
+              setIsPresenting(true);
+            }}
+            disabled={!story || loading || generating}
+            title="Present full-screen slide deck"
+          >
+            <Presentation className="h-3.5 w-3.5 mr-1" /> Present
+          </Button>
+          <Button onClick={handleGenerateStory} disabled={generating || loading || !currentProject}>
+            {generating ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Generating…
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-3.5 w-3.5 mr-1" />
+                {story ? "Regenerate" : "Generate Story"}
+              </>
+            )}
+          </Button>
         </div>
       </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat label="Services" value="14" />
-        <Stat label="APIs" value="126" />
-        <Stat label="DB Tables" value="38" />
-        <Stat label="Test coverage" value="72%" />
-      </div>
-
-      <Slide index="01" title="Project summary">
-        <p>
-          The ERP Platform is a multi-tenant enterprise resource planning system serving 40+ business units.
-          It manages orders, billing, notifications, and analytics across a distributed service topology deployed to Kubernetes on AWS.
-          ArchForge is used as the single source of truth for architecture, keeping generated design, code, and documentation continuously reconciled.
-        </p>
-      </Slide>
-
-      <Slide index="02" title="Architecture overview">
-        <ul>
-          <li>Gateway-fronted microservices with strict service boundaries.</li>
-          <li>AuthService owns identity, JWT + refresh tokens with PKCE.</li>
-          <li>Redis cache in front of OrdersService for a 20% p95 latency reduction.</li>
-          <li>Kafka event bus for asynchronous notification fanout.</li>
-          <li>Postgres primary with read replica in eu-west-1.</li>
-        </ul>
-      </Slide>
-
-      <Slide index="03" title="Technology stack">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 not-prose">
-          {[
-            ["Frontend", "React 18, Vite, TanStack Router"],
-            ["Backend", "Node.js, Fastify, TypeScript"],
-            ["Database", "PostgreSQL 15, Redis 7"],
-            ["Messaging", "Kafka 3.6"],
-            ["Auth", "OAuth 2.1 + PKCE, Argon2id"],
-            ["Infra", "Kubernetes, Helm, Terraform, AWS"],
-          ].map(([k, v]) => (
-            <div key={k} className="surface-panel p-3">
-              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{k}</div>
-              <div className="text-sm font-medium mt-1">{v}</div>
-            </div>
-          ))}
+      {!currentProject ? (
+        <div className="surface-panel p-8 text-center space-y-3">
+          <FolderOpen className="h-8 w-8 text-muted-foreground mx-auto" />
+          <h3 className="text-sm font-semibold">No Project Selected</h3>
+          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+            Select an active project to view or generate its architectural story.
+          </p>
         </div>
-      </Slide>
+      ) : loading ? (
+        <div className="surface-panel p-12 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <span className="text-xs font-mono">Loading project story…</span>
+        </div>
+      ) : error ? (
+        <div className="surface-panel p-6 border-destructive/30 bg-destructive/5 space-y-3">
+          <div className="flex items-center gap-2 text-destructive text-sm font-medium">
+            <AlertTriangle className="h-4 w-4" />
+            <span>Failed to load project story</span>
+          </div>
+          <p className="text-xs text-muted-foreground">{error}</p>
+          <Button size="sm" variant="outline" onClick={fetchStory}>
+            Retry
+          </Button>
+        </div>
+      ) : !story ? (
+        <div className="surface-panel p-12 text-center space-y-4">
+          <BookOpen className="h-10 w-10 text-primary mx-auto opacity-80" />
+          <div className="space-y-1">
+            <h2 className="text-lg font-display font-semibold">No Story Generated Yet</h2>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
+              ArchForge will synthesize your requirements, architecture components, edges, and technology choices
+              into an executive engineering deck.
+            </p>
+          </div>
+          <Button onClick={handleGenerateStory} disabled={generating}>
+            {generating ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Generating…
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-3.5 w-3.5 mr-1" /> Generate Story
+              </>
+            )}
+          </Button>
+        </div>
+      ) : (
+        <>
+          {/* Summary Stat Counters */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="surface-panel p-3">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Components</div>
+              <div className="text-xl font-display font-semibold mt-1">
+                {content?.architecture?.length ?? 0}
+              </div>
+            </div>
+            <div className="surface-panel p-3">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                Technologies
+              </div>
+              <div className="text-xl font-display font-semibold mt-1">
+                {content?.technologyChoices?.length ?? 0}
+              </div>
+            </div>
+            <div className="surface-panel p-3">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Connections</div>
+              <div className="text-xl font-display font-semibold mt-1">
+                {content?.dataFlow?.length ?? 0}
+              </div>
+            </div>
+            <div className="surface-panel p-3">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Baseline</div>
+              <div className="text-sm font-medium mt-1 truncate">
+                {content?.currentState || "Saved"}
+              </div>
+            </div>
+          </div>
 
-      <Slide index="04" title="Repository analysis">
-        <ul>
-          <li>Monorepo with 1,214 source files across 9 packages.</li>
-          <li>92% match between architecture spec and repository code (drift score).</li>
-          <li>0 critical CVEs · 3 medium CVEs pending upgrade.</li>
-          <li>Documentation coverage grew from 42% (Sprint 1) to 76% (v12).</li>
-        </ul>
-      </Slide>
+          {/* Slides List */}
+          <div className="space-y-4">
+            {slides.map((s) => (
+              <div key={s.index} className="surface-panel p-6 space-y-3">
+                <div className="flex items-baseline justify-between border-b border-border pb-2.5">
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-mono text-xs text-primary">{s.index}</span>
+                    <h2 className="text-base font-display font-semibold">{s.title}</h2>
+                  </div>
+                  <span className="text-[11px] font-mono text-muted-foreground">{s.subtitle}</span>
+                </div>
+                {s.body}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
-      <Slide index="05" title="Engineering challenges">
-        <ul>
-          <li>Untangling coupled Auth + Profile responsibilities without breaking clients.</li>
-          <li>Absorbing a 3x traffic spike during promotional windows.</li>
-          <li>Reconciling architecture spec against a monorepo with legacy cron workers.</li>
-          <li>Keeping documentation from decaying under weekly deploys.</li>
-        </ul>
-      </Slide>
+      {/* Full-Screen Presentation Mode Modal */}
+      {isPresenting && (
+        <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-md flex flex-col p-6 sm:p-12">
+          <div className="flex items-center justify-between pb-4 border-b border-border">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono uppercase tracking-wider text-primary">Slide</span>
+              <span className="font-mono text-xs text-foreground font-semibold">
+                {slideIndex + 1} of {slides.length}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setIsPresenting(false)}
+              title="Close Presentation"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
 
-      <Slide index="06" title="Key engineering decisions">
-        <ul>
-          <li><strong>Split UserService → AuthService + UserService</strong> — restored clear ownership.</li>
-          <li><strong>Redis in front of Orders</strong> — 35% throughput gain, 5% cost delta.</li>
-          <li><strong>Kafka for notifications</strong> — decoupled fanout from request path.</li>
-          <li><strong>ArchForge Playground gating</strong> — no architectural change ships without simulation.</li>
-        </ul>
-      </Slide>
+          <div className="flex-1 flex flex-col justify-center max-w-3xl mx-auto w-full py-8">
+            <div className="space-y-2 mb-8">
+              <div className="text-xs font-mono text-primary uppercase tracking-wider">
+                {slides[slideIndex].index} · {slides[slideIndex].subtitle}
+              </div>
+              <h1 className="text-3xl sm:text-4xl font-display font-semibold">
+                {slides[slideIndex].title}
+              </h1>
+            </div>
+            <div className="surface-panel p-8">{slides[slideIndex].body}</div>
+          </div>
 
-      <Slide index="07" title="Future improvements">
-        <ul>
-          <li>Introduce a CDN edge layer for SSR responses (est. +28% perf).</li>
-          <li>Adopt a rate limiter fronting /auth (security +18).</li>
-          <li>Automate drift remediation via GitHub Actions on every push.</li>
-          <li>Extend Story Mode with per-service deep-dives for onboarding.</li>
-        </ul>
-      </Slide>
-
-      <Slide index="08" title="Presentation notes">
-        <ul>
-          <li><em>Open with the drift score</em> — the &ldquo;92% match&rdquo; number lands well.</li>
-          <li>Show the Playground simulating Redis before showing the topology.</li>
-          <li>Use version compare (v11 → v12) to demonstrate change tracking.</li>
-          <li>Close with Story Mode itself as proof of the platform&rsquo;s value.</li>
-        </ul>
-      </Slide>
-
-      <div className="surface-panel p-4 flex items-center gap-3">
-        <Sparkles className="h-4 w-4 text-primary" />
-        <span className="text-sm">Ready to present. Story regenerates automatically on every architecture change.</span>
-        <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground" />
-      </div>
+          <div className="flex items-center justify-between pt-4 border-t border-border max-w-3xl mx-auto w-full">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSlideIndex((i) => Math.max(0, i - 1))}
+              disabled={slideIndex === 0}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+            </Button>
+            <div className="flex gap-1.5">
+              {slides.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setSlideIndex(i)}
+                  className={`h-2 rounded-full transition-all ${
+                    i === slideIndex ? "w-6 bg-primary" : "w-2 bg-border hover:bg-muted-foreground"
+                  }`}
+                  aria-label={`Go to slide ${i + 1}`}
+                />
+              ))}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSlideIndex((i) => Math.min(slides.length - 1, i + 1))}
+              disabled={slideIndex === slides.length - 1}
+            >
+              Next <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="surface-panel p-3.5">
-      <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="text-2xl font-display font-semibold tabular-nums mt-1">{value}</div>
-    </div>
-  );
-}
-
-function Slide({ index, title, children }: { index: string; title: string; children: React.ReactNode }) {
-  return (
-    <section className="surface-panel">
-      <div className="h-10 px-4 flex items-center border-b border-border">
-        <span className="font-mono text-xs text-primary mr-3">{index}</span>
-        <span className="font-display font-semibold">{title}</span>
-      </div>
-      <div className="p-5 prose prose-invert prose-sm max-w-none prose-p:text-foreground/90 prose-li:text-foreground/90">
-        {children}
-      </div>
-    </section>
   );
 }

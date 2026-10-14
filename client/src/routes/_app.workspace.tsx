@@ -31,6 +31,7 @@ import {
   FolderGit2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -49,10 +50,15 @@ import {
   getArchitecture,
   generateArchitecture,
   saveArchitectureVersion,
+  updateArchitectureEdge,
+  explainArchitectureNode,
+  runDesignReview,
   type ArchitectureNode,
   type ArchitectureVersion,
   type ArchitectureNodeType,
   type ArchitecturePreview,
+  type ArchitectureExplanation,
+  type DesignReviewFinding,
 } from "@/api/architecture";
 import { toast } from "sonner";
 
@@ -78,6 +84,7 @@ export const Route = createFileRoute("/_app/workspace")({
 
 export type CanvasNodeData = {
   id: string;
+  backendId?: string;
   label: string;
   kind: string;
   x: number;
@@ -88,6 +95,7 @@ export type CanvasNodeData = {
 };
 
 export type CanvasEdgeData = {
+  id?: string;
   from: string;
   to: string;
   relationship?: string;
@@ -111,6 +119,7 @@ function formatTime(date: Date = new Date()): string {
 function archNodeToCanvas(n: ArchitectureNode): CanvasNodeData {
   return {
     id: n.node_key,
+    backendId: n.id,
     label: n.name,
     kind: n.type,
     x: n.position_x,
@@ -190,6 +199,7 @@ function WorkspacePage() {
           setCanvasEdges(
             graph.edges
               .map((e) => ({
+                id: e.id,
                 from: nodeKeyMap.get(e.source_node_id) ?? "",
                 to: nodeKeyMap.get(e.target_node_id) ?? "",
                 relationship: e.relationship,
@@ -493,6 +503,8 @@ function WorkspacePage() {
                   }}
                   onSelectEdge={(key) => {
                     setSelectedEdge(key);
+                    setSelected(null);
+                    setRightTab("inspector");
                   }}
                   onUpdateNodePos={handleUpdateNodePos}
                   onGenerate={handleGenerateArchitecture}
@@ -507,9 +519,21 @@ function WorkspacePage() {
                   tab={rightTab}
                   onTab={setRightTab}
                   selected={selected}
+                  selectedEdge={selectedEdge}
                   canvasNodes={canvasNodes}
                   canvasEdges={canvasEdges}
-                  onClose={() => setSelected(null)}
+                  currentProject={currentProject}
+                  currentVersion={currentVersion}
+                  onClose={() => {
+                    setSelected(null);
+                    setSelectedEdge(null);
+                  }}
+                  onSelectNode={(nodeKey) => {
+                    setSelected(nodeKey);
+                    setSelectedEdge(null);
+                    setRightTab("inspector");
+                  }}
+                  onReload={fetchArchitecture}
                 />
               </ResizablePanel>
             </ResizablePanelGroup>
@@ -1537,6 +1561,7 @@ function LiveMiniMap({
 
 type DynamicInspector = {
   id: string;
+  backendId?: string;
   name: string;
   kind: string;
   description: string;
@@ -1631,6 +1656,7 @@ function buildDynamicInspectorData(
 
   return {
     id: node.id,
+    backendId: node.backendId,
     name: node.label,
     kind: node.kind,
     description: node.description || `${node.label} component derived from project requirements`,
@@ -1651,18 +1677,31 @@ function RightPane({
   tab,
   onTab,
   selected,
+  selectedEdge,
   canvasNodes,
   canvasEdges,
+  currentProject,
+  currentVersion,
   onClose,
+  onSelectNode,
+  onReload,
 }: {
   tab: "inspector" | "ai";
   onTab: (t: "inspector" | "ai") => void;
   selected: string | null;
+  selectedEdge: string | null;
   canvasNodes: CanvasNodeData[];
   canvasEdges: CanvasEdgeData[];
+  currentProject: any;
+  currentVersion: ArchitectureVersion | null;
   onClose: () => void;
+  onSelectNode: (key: string) => void;
+  onReload: () => void;
 }) {
   const inspectorData = buildDynamicInspectorData(selected, canvasNodes, canvasEdges);
+  const activeEdge = selectedEdge
+    ? canvasEdges.find((e) => `${e.from}->${e.to}` === selectedEdge)
+    : null;
 
   return (
     <div className="h-full flex flex-col bg-panel/40">
@@ -1676,7 +1715,7 @@ function RightPane({
               : "border-transparent text-muted-foreground hover:text-foreground")
           }
         >
-          Inspector
+          {selectedEdge ? "Edge Inspector" : "Inspector"}
         </button>
         <button
           onClick={() => onTab("ai")}
@@ -1687,9 +1726,9 @@ function RightPane({
               : "border-transparent text-muted-foreground hover:text-foreground")
           }
         >
-          Insights
+          Design Review & Insights
         </button>
-        {tab === "inspector" && selected && (
+        {tab === "inspector" && (selected || selectedEdge) && (
           <button
             onClick={onClose}
             className="ml-auto h-7 w-7 grid place-items-center text-muted-foreground hover:text-foreground"
@@ -1700,14 +1739,180 @@ function RightPane({
         )}
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {tab === "ai" && <ArchitectureInsights nodes={canvasNodes} />}
-        {tab === "inspector" && (inspectorData ? <InspectorView data={inspectorData} /> : <InspectorEmpty />)}
+        {tab === "ai" && (
+          <ArchitectureInsights
+            nodes={canvasNodes}
+            currentProject={currentProject}
+            onSelectNode={onSelectNode}
+          />
+        )}
+        {tab === "inspector" &&
+          (activeEdge ? (
+            <EdgeInspectorView
+              edge={activeEdge}
+              canvasNodes={canvasNodes}
+              currentProject={currentProject}
+              currentVersion={currentVersion}
+              onReload={onReload}
+            />
+          ) : inspectorData ? (
+            <InspectorView data={inspectorData} currentProject={currentProject} />
+          ) : (
+            <InspectorEmpty />
+          ))}
       </div>
     </div>
   );
 }
 
-function ArchitectureInsights({ nodes }: { nodes: CanvasNodeData[] }) {
+function EdgeInspectorView({
+  edge,
+  canvasNodes,
+  currentProject,
+  currentVersion,
+  onReload,
+}: {
+  edge: CanvasEdgeData;
+  canvasNodes: CanvasNodeData[];
+  currentProject: any;
+  currentVersion: ArchitectureVersion | null;
+  onReload: () => void;
+}) {
+  const [relationship, setRelationship] = useState(edge.relationship || "calls");
+  const [protocol, setProtocol] = useState(edge.protocol || "HTTP/REST");
+  const [description, setDescription] = useState(edge.description || "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setRelationship(edge.relationship || "calls");
+    setProtocol(edge.protocol || "HTTP/REST");
+    setDescription(edge.description || "");
+  }, [edge]);
+
+  const fromNode = canvasNodes.find((n) => n.id === edge.from);
+  const toNode = canvasNodes.find((n) => n.id === edge.to);
+
+  const handleSaveEdge = async () => {
+    if (!currentProject || !currentVersion?.id || !edge.id) {
+      toast.info("Edge updated in local preview.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateArchitectureEdge(currentProject.id, currentVersion.id, edge.id, {
+        relationship: relationship as any,
+        protocol: protocol || undefined,
+        description: description || undefined,
+      });
+      toast.success("Architecture edge updated successfully.");
+      onReload();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || "Failed to update edge");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="p-3 space-y-4 text-xs">
+      <div className="space-y-1">
+        <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+          Architecture Edge
+        </div>
+        <div className="text-sm font-display font-semibold flex items-center gap-1.5">
+          <span>{fromNode?.label || edge.from}</span>
+          <ArrowRight className="h-3 w-3 text-primary" />
+          <span>{toNode?.label || edge.to}</span>
+        </div>
+        <div className="text-[11px] font-mono text-muted-foreground">
+          {edge.id ? `ID: ${edge.id.slice(0, 8)}` : "Preview edge"}
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+            Relationship
+          </label>
+          <select
+            value={relationship}
+            onChange={(e) => setRelationship(e.target.value)}
+            className="w-full h-8 px-2 rounded border border-border bg-background text-xs font-mono"
+          >
+            <option value="calls">calls (service invocation)</option>
+            <option value="reads">reads (data store query)</option>
+            <option value="writes">writes (data persistence)</option>
+            <option value="publishes">publishes (event stream)</option>
+            <option value="subscribes">subscribes (event consumption)</option>
+            <option value="authenticates">authenticates (identity token check)</option>
+            <option value="streams">streams (duplex socket)</option>
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+            Protocol / Transport
+          </label>
+          <Input
+            value={protocol}
+            onChange={(e) => setProtocol(e.target.value)}
+            placeholder="e.g. gRPC, HTTP/REST, WebSocket, TCP"
+            className="text-xs font-mono"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+            Description
+          </label>
+          <Input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="e.g. Synchronous query with retry & backoff"
+            className="text-xs"
+          />
+        </div>
+
+        <Button
+          onClick={handleSaveEdge}
+          disabled={saving}
+          className="w-full text-xs font-semibold gap-1.5"
+          size="sm"
+        >
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+          Save Edge Updates
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ArchitectureInsights({
+  nodes,
+  currentProject,
+  onSelectNode,
+}: {
+  nodes: CanvasNodeData[];
+  currentProject: any;
+  onSelectNode: (key: string) => void;
+}) {
+  const [findings, setFindings] = useState<DesignReviewFinding[] | null>(null);
+  const [isRunningReview, setIsRunningReview] = useState(false);
+
+  const handleRunDesignReview = async () => {
+    if (!currentProject) return;
+    setIsRunningReview(true);
+    try {
+      const res = await runDesignReview(currentProject.id);
+      setFindings(res);
+      toast.success(`Design review completed: ${res.length} findings`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || "Failed to run design review");
+    } finally {
+      setIsRunningReview(false);
+    }
+  };
+
   const hasDb = nodes.some((n) => n.kind === "database");
   const hasCache = nodes.some((n) => n.kind === "cache");
   const hasAuth = nodes.some((n) => n.kind === "auth");
@@ -1744,16 +1949,113 @@ function ArchitectureInsights({ nodes }: { nodes: CanvasNodeData[] }) {
   ];
 
   return (
-    <div className="p-3 space-y-2 text-xs">
-      <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
-        Architecture Analysis ({nodes.length} components)
-      </div>
-      {insights.map((item, i) => (
-        <div key={i} className="rounded border border-border bg-background p-2.5 space-y-1">
-          <div className="font-semibold text-foreground text-xs">{item.title}</div>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">{item.body}</p>
+    <div className="p-3 space-y-3 text-xs">
+      <div className="surface-panel p-3 space-y-2 border border-primary/30 bg-primary/5">
+        <div className="flex items-center justify-between">
+          <div className="font-semibold text-xs flex items-center gap-1.5 text-foreground">
+            <ShieldAlert className="h-3.5 w-3.5 text-primary" />
+            <span>Design Review Engine</span>
+          </div>
+          <Button
+            size="sm"
+            onClick={handleRunDesignReview}
+            disabled={isRunningReview || !currentProject}
+            className="h-7 px-2 text-[11px]"
+          >
+            {isRunningReview ? (
+              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+            ) : (
+              <Sparkles className="h-3 w-3 mr-1" />
+            )}
+            Run Review
+          </Button>
         </div>
-      ))}
+        <p className="text-[11px] text-muted-foreground">
+          Audits topology for coupling hotspots, unlinked components, and reliability risks.
+        </p>
+      </div>
+
+      {findings && (
+        <div className="space-y-2">
+          <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+            <span>Review Findings</span>
+            <span>{findings.length} findings</span>
+          </div>
+          {findings.length === 0 ? (
+            <div className="p-3 rounded border border-success/30 bg-success/10 text-success text-[11px]">
+              No architecture design issues identified! Topology conforms to best practices.
+            </div>
+          ) : (
+            findings.map((f, idx) => {
+              const isHigh = f.severity === "high";
+              const isMed = f.severity === "medium";
+              return (
+                <div
+                  key={idx}
+                  className={`p-2.5 rounded border space-y-1.5 ${
+                    isHigh
+                      ? "border-destructive/40 bg-destructive/10"
+                      : isMed
+                        ? "border-warning/40 bg-warning/10"
+                        : "border-info/40 bg-info/10"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-1.5">
+                    <span className="font-semibold text-foreground text-xs">{f.finding}</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-mono uppercase font-bold shrink-0 ${
+                        isHigh
+                          ? "bg-destructive text-destructive-foreground"
+                          : isMed
+                            ? "bg-warning text-black"
+                            : "bg-info text-info-foreground"
+                      }`}
+                    >
+                      {f.severity}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    {f.explanation}
+                  </p>
+                  <div className="text-[11px] text-foreground font-medium bg-background/60 p-1.5 rounded">
+                    Rec: {f.recommendation}
+                  </div>
+                  {f.component_ids && f.component_ids.length > 0 && (
+                    <div className="flex items-center gap-1 pt-1">
+                      <span className="text-[10px] font-mono text-muted-foreground">Affected:</span>
+                      {f.component_ids.map((cid) => {
+                        const matched = nodes.find((n) => n.backendId === cid || n.id === cid);
+                        return (
+                          <button
+                            key={cid}
+                            type="button"
+                            onClick={() => onSelectNode(matched ? matched.id : cid)}
+                            className="px-1.5 py-0.5 rounded border border-border bg-surface text-[10px] font-mono hover:border-primary transition-colors text-primary"
+                          >
+                            {matched ? matched.label : cid.slice(0, 8)} →
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      <div className="pt-2 border-t border-border space-y-2">
+        <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+          Architecture Analysis ({nodes.length} components)
+        </div>
+        {insights.map((item, i) => (
+          <div key={i} className="rounded border border-border bg-background p-2.5 space-y-1">
+            <div className="font-semibold text-foreground text-xs">{item.title}</div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">{item.body}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1766,14 +2068,23 @@ function InspectorEmpty() {
           <Layers className="h-4 w-4 text-muted-foreground" />
         </div>
         <div className="text-xs text-muted-foreground">
-          Select a component on the canvas to inspect its responsibilities, dependencies, and network connections.
+          Select a component or connection wire on the canvas to inspect or edit details.
         </div>
       </div>
     </div>
   );
 }
 
-function InspectorView({ data }: { data: DynamicInspector }) {
+function InspectorView({
+  data,
+  currentProject,
+}: {
+  data: DynamicInspector;
+  currentProject: any;
+}) {
+  const [explanation, setExplanation] = useState<ArchitectureExplanation | null>(null);
+  const [isExplaining, setIsExplaining] = useState(false);
+
   const cxTone =
     data.complexity === "High"
       ? "text-destructive"
@@ -1781,15 +2092,66 @@ function InspectorView({ data }: { data: DynamicInspector }) {
         ? "text-warning"
         : "text-success";
 
+  const handleExplainNode = async () => {
+    if (!currentProject || !data.backendId) {
+      toast.error("Component node backend record not loaded.");
+      return;
+    }
+    setIsExplaining(true);
+    try {
+      const res = await explainArchitectureNode(currentProject.id, data.backendId);
+      setExplanation(res);
+      toast.success("Architecture explanation generated.");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || "Failed to generate explanation");
+    } finally {
+      setIsExplaining(false);
+    }
+  };
+
   return (
     <div className="p-3 space-y-3 text-xs">
       <div className="space-y-1">
-        <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-          {data.kind}
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+            {data.kind}
+          </div>
+          {data.backendId && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExplainNode}
+              disabled={isExplaining}
+              className="h-6 px-2 text-[10px] font-mono gap-1"
+            >
+              {isExplaining ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3 text-primary" />}
+              Explain Component
+            </Button>
+          )}
         </div>
         <div className="text-base font-display font-semibold tracking-tight">{data.name}</div>
         <p className="text-muted-foreground leading-relaxed">{data.description}</p>
       </div>
+
+      {explanation && (
+        <div className="p-2.5 rounded border border-primary/40 bg-primary/5 space-y-1.5">
+          <div className="font-semibold text-xs text-primary flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>AI Architecture Explanation</span>
+          </div>
+          <p className="text-[11px] text-foreground leading-relaxed">{explanation.purpose || explanation.responsibility}</p>
+          {explanation.securityConsiderations && explanation.securityConsiderations.length > 0 && (
+            <div className="pt-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Security:</span>
+              <ul className="list-disc list-inside text-[10px] text-muted-foreground mt-0.5">
+                {explanation.securityConsiderations.map((sc: string, i: number) => (
+                  <li key={i}>{sc}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <MetaChip label="Complexity" value={data.complexity} tone={cxTone} />

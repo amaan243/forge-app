@@ -22,7 +22,6 @@ import {
   User,
   LogOut,
   Settings as SettingsIcon,
-  Command as CommandIcon,
   History,
   GitCompare,
   Radar,
@@ -32,12 +31,20 @@ import {
   Camera,
   BookOpen,
   Loader2,
+  Menu,
+  X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { CommandPalette } from "@/components/command-palette";
 import { GeometricAvatar } from "@/components/geometric-avatar";
 import { getHealth } from "@/api/health";
+import {
+  getNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  type AppNotification,
+} from "@/api";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
 import { ProjectSwitcher } from "@/components/project-switcher";
@@ -46,7 +53,7 @@ export const Route = createFileRoute("/_app")({
   component: AppShell,
 });
 
-type NavItem = {
+export interface NavItem {
   to:
     | "/"
     | "/quality"
@@ -71,32 +78,85 @@ type NavItem = {
   label: string;
   icon: typeof LayoutDashboard;
   exact?: boolean;
-};
+}
 
-const NAV: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { to: "/quality", label: "Release Quality", icon: ShieldCheck },
-  { to: "/workflow", label: "Workflow", icon: ActivityIcon },
-  { to: "/knowledge-graph", label: "Knowledge Graph", icon: Share2 },
-  { to: "/workspace", label: "Workspace", icon: Workflow },
-  { to: "/architecture", label: "Architecture", icon: Network },
-  { to: "/repository", label: "Repository", icon: GitBranch },
-  { to: "/documentation", label: "Documentation", icon: FileText },
-  { to: "/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/exports", label: "Exports", icon: Download },
-  { to: "/settings", label: "Settings", icon: Settings },
-];
+export interface NavGroup {
+  id: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  items: NavItem[];
+}
 
-const INTEL_NAV: NavItem[] = [
-  { to: "/impact", label: "Impact Analysis", icon: ShieldAlert },
-  { to: "/playground", label: "Playground", icon: FlaskConical },
-  { to: "/versions", label: "Versions", icon: History },
-  { to: "/compare", label: "Compare", icon: GitCompare },
-  { to: "/drift", label: "Drift", icon: Radar },
-  { to: "/dependencies", label: "Dependencies", icon: Share2 },
-  { to: "/timeline", label: "Timeline", icon: ActivityIcon },
-  { to: "/snapshots", label: "Snapshots", icon: Camera },
-  { to: "/story", label: "Story", icon: BookOpen },
+export const NAVIGATION_GROUPS: NavGroup[] = [
+  {
+    id: "overview",
+    label: "Overview",
+    icon: LayoutDashboard,
+    items: [
+      { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
+    ],
+  },
+  {
+    id: "design-studio",
+    label: "Design Studio",
+    icon: Workflow,
+    items: [
+      { to: "/workspace", label: "Workspace Studio", icon: Workflow },
+      { to: "/architecture", label: "Architecture", icon: Network },
+      { to: "/versions", label: "Versions", icon: History },
+      { to: "/compare", label: "Compare", icon: GitCompare },
+    ],
+  },
+  {
+    id: "code-intelligence",
+    label: "Code Intelligence",
+    icon: GitBranch,
+    items: [
+      { to: "/repository", label: "Repository", icon: GitBranch },
+      { to: "/dependencies", label: "Dependencies", icon: Package },
+      { to: "/drift", label: "Architecture Drift", icon: Radar },
+      { to: "/impact", label: "Impact Analysis", icon: ShieldAlert },
+      { to: "/knowledge-graph", label: "Knowledge Graph", icon: Share2 },
+    ],
+  },
+  {
+    id: "engineering",
+    label: "Engineering",
+    icon: ActivityIcon,
+    items: [
+      { to: "/workflow", label: "Workflow Orchestrator", icon: ActivityIcon },
+      { to: "/playground", label: "Engineering Playground", icon: FlaskConical },
+      { to: "/documentation", label: "Documentation", icon: FileText },
+      { to: "/story", label: "Story Mode", icon: BookOpen },
+    ],
+  },
+  {
+    id: "release-quality",
+    label: "Release & Quality",
+    icon: ShieldCheck,
+    items: [
+      { to: "/quality", label: "Quality & Readiness", icon: ShieldCheck },
+    ],
+  },
+  {
+    id: "insights-exports",
+    label: "Insights & Exports",
+    icon: BarChart3,
+    items: [
+      { to: "/analytics", label: "Analytics & Telemetry", icon: BarChart3 },
+      { to: "/exports", label: "Exports", icon: Download },
+      { to: "/timeline", label: "Project Timeline", icon: History },
+      { to: "/snapshots", label: "Architecture Snapshots", icon: Camera },
+    ],
+  },
+  {
+    id: "workspace-admin",
+    label: "Workspace Administration",
+    icon: Settings,
+    items: [
+      { to: "/settings", label: "Settings & Members", icon: Settings },
+    ],
+  },
 ];
 
 function AppShell() {
@@ -108,6 +168,45 @@ function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Collapsed groups state with persistence
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem("archforge:nav_collapsed_groups");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Automatically expand group containing active route
+  useEffect(() => {
+    for (const group of NAVIGATION_GROUPS) {
+      const hasActive = group.items.some((item) =>
+        item.exact ? pathname === item.to : pathname === item.to || pathname.startsWith(item.to + "/")
+      );
+      if (hasActive && collapsedGroups[group.id]) {
+        setCollapsedGroups((prev) => {
+          const next = { ...prev, [group.id]: false };
+          try {
+            localStorage.setItem("archforge:nav_collapsed_groups", JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+      }
+    }
+  }, [pathname, collapsedGroups]);
+
+  const toggleGroup = (groupId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = { ...prev, [groupId]: !prev[groupId] };
+      try {
+        localStorage.setItem("archforge:nav_collapsed_groups", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -150,89 +249,194 @@ function AppShell() {
 
   return (
     <div className="flex h-screen overflow-hidden text-foreground">
-      <aside className="w-56 shrink-0 border-r border-border bg-panel flex flex-col h-full">
+      {/* Desktop Sidebar */}
+      <aside className="w-56 shrink-0 border-r border-border bg-panel hidden md:flex flex-col h-full">
         <div className="h-12 px-3 flex items-center border-b border-border shrink-0">
           <Logo />
         </div>
         <div className="p-2 border-b border-border shrink-0">
           <WorkspaceSwitcher />
         </div>
-        <nav className="flex-1 min-h-0 overflow-y-auto p-2 space-y-0.5">
-          <div className="px-2 pt-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-            Workstation
-          </div>
-          {NAV.map((item) => {
-            const active = item.exact ? pathname === item.to : pathname.startsWith(item.to);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={
-                  "flex items-center gap-2 h-8 px-2 rounded text-xs transition-colors " +
-                  (active
-                    ? "bg-surface text-foreground border border-border"
-                    : "text-muted-foreground hover:text-foreground hover:bg-surface/60 border border-transparent")
-                }
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span>{item.label}</span>
-                {active && <span className="ml-auto h-1 w-1 rounded-full bg-primary" />}
-              </Link>
+        <nav className="flex-1 min-h-0 overflow-y-auto px-2 py-1.5 space-y-1 select-none">
+          {NAVIGATION_GROUPS.map((group) => {
+            const isCollapsed = Boolean(collapsedGroups[group.id]);
+            const GroupIcon = group.icon;
+            const hasActiveItem = group.items.some((item) =>
+              item.exact ? pathname === item.to : pathname === item.to || pathname.startsWith(item.to + "/")
             );
-          })}
-          <div className="px-2 pt-4 pb-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-            Intelligence
-          </div>
-          {INTEL_NAV.map((item) => {
-            const active = pathname.startsWith(item.to);
-            const Icon = item.icon;
+
             return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={
-                  "flex items-center gap-2 h-8 px-2 rounded text-xs transition-colors " +
-                  (active
-                    ? "bg-surface text-foreground border border-border"
-                    : "text-muted-foreground hover:text-foreground hover:bg-surface/60 border border-transparent")
-                }
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span>{item.label}</span>
-                {active && <span className="ml-auto h-1 w-1 rounded-full bg-primary" />}
-              </Link>
+              <div key={group.id} className="space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.id)}
+                  className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-mono uppercase tracking-wider font-semibold text-muted-foreground hover:text-foreground rounded transition-colors group select-none"
+                  aria-expanded={!isCollapsed}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <GroupIcon className={`h-3 w-3 shrink-0 transition-colors ${hasActiveItem ? "text-primary" : "text-muted-foreground/80 group-hover:text-foreground"}`} />
+                    <span className="truncate">{group.label}</span>
+                  </div>
+                  <ChevronDown
+                    className={`h-3 w-3 text-muted-foreground/70 transition-transform duration-150 shrink-0 ${
+                      isCollapsed ? "-rotate-90" : "rotate-0"
+                    }`}
+                  />
+                </button>
+
+                {!isCollapsed && (
+                  <div className="space-y-0.5 pl-2 border-l border-border/40 ml-2.5">
+                    {group.items.map((item) => {
+                      const active = item.exact
+                        ? pathname === item.to
+                        : pathname === item.to || pathname.startsWith(item.to + "/");
+                      const Icon = item.icon;
+                      return (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          className={
+                            "flex items-center gap-2 h-7 px-2 rounded text-xs transition-colors " +
+                            (active
+                              ? "bg-surface text-foreground font-medium border border-border/80 shadow-xs"
+                              : "text-muted-foreground hover:text-foreground hover:bg-surface/50 border border-transparent")
+                          }
+                        >
+                          <Icon className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{item.label}</span>
+                          {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary shrink-0" />}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
         <div className="shrink-0 p-2 border-t border-border space-y-2">
-          <div className="surface-panel p-2.5">
+          <div className="surface-panel p-2">
             <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
               <span>Cluster</span>
               <span className="text-success">● online</span>
             </div>
-            <div className="mt-1 text-xs font-mono">us-east-1 · gen-4</div>
+            <div className="mt-0.5 text-xs font-mono">us-east-1 · gen-4</div>
           </div>
           <UserMenu open={userOpen} onOpenChange={setUserOpen} user={user} onLogout={handleLogout} />
         </div>
       </aside>
 
+      {/* Mobile Drawer */}
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          <div
+            className="fixed inset-0 bg-background/80 backdrop-blur-xs transition-opacity"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <div className="relative w-64 max-w-[85vw] bg-panel border-r border-border h-full flex flex-col z-10 shadow-2xl">
+            <div className="h-12 px-3 flex items-center justify-between border-b border-border shrink-0">
+              <Logo />
+              <button
+                onClick={() => setMobileNavOpen(false)}
+                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface"
+                aria-label="Close navigation"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-2 border-b border-border shrink-0">
+              <WorkspaceSwitcher />
+            </div>
+            <nav className="flex-1 min-h-0 overflow-y-auto px-2 py-1.5 space-y-1">
+              {NAVIGATION_GROUPS.map((group) => {
+                const isCollapsed = Boolean(collapsedGroups[group.id]);
+                const GroupIcon = group.icon;
+                const hasActiveItem = group.items.some((item) =>
+                  item.exact ? pathname === item.to : pathname === item.to || pathname.startsWith(item.to + "/")
+                );
+
+                return (
+                  <div key={group.id} className="space-y-0.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group.id)}
+                      className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-mono uppercase tracking-wider font-semibold text-muted-foreground hover:text-foreground rounded transition-colors group select-none"
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <GroupIcon className={`h-3 w-3 shrink-0 ${hasActiveItem ? "text-primary" : "text-muted-foreground/80"}`} />
+                        <span className="truncate">{group.label}</span>
+                      </div>
+                      <ChevronDown
+                        className={`h-3 w-3 text-muted-foreground/70 transition-transform duration-150 shrink-0 ${
+                          isCollapsed ? "-rotate-90" : "rotate-0"
+                        }`}
+                      />
+                    </button>
+
+                    {!isCollapsed && (
+                      <div className="space-y-0.5 pl-2 border-l border-border/40 ml-2.5">
+                        {group.items.map((item) => {
+                          const active = item.exact
+                            ? pathname === item.to
+                            : pathname === item.to || pathname.startsWith(item.to + "/");
+                          const Icon = item.icon;
+                          return (
+                            <Link
+                              key={item.to}
+                              to={item.to}
+                              onClick={() => setMobileNavOpen(false)}
+                              className={
+                                "flex items-center gap-2 h-7 px-2 rounded text-xs transition-colors " +
+                                (active
+                                  ? "bg-surface text-foreground font-medium border border-border/80 shadow-xs"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-surface/50 border border-transparent")
+                              }
+                            >
+                              <Icon className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{item.label}</span>
+                              {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary shrink-0" />}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </nav>
+            <div className="shrink-0 p-2 border-t border-border space-y-2">
+              <UserMenu open={userOpen} onOpenChange={setUserOpen} user={user} onLogout={handleLogout} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         <header className="relative z-50 h-12 border-b border-border bg-panel/95 backdrop-blur-sm flex items-center gap-3 px-4 shrink-0">
-          <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground">
-            <span>archforge</span>
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            className="md:hidden h-7 w-7 grid place-items-center rounded border border-border text-muted-foreground hover:text-foreground hover:bg-surface transition-colors"
+            aria-label="Open navigation menu"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
+
+          <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground min-w-0 truncate">
+            <span className="hidden sm:inline">archforge</span>
             {currentWorkspace && (
               <>
-                <ChevronRight className="h-3 w-3" />
-                <span className="text-foreground">{currentWorkspace.name}</span>
-                <ChevronRight className="h-3 w-3" />
+                <ChevronRight className="h-3 w-3 shrink-0 hidden sm:inline" />
+                <span className="text-foreground shrink-0">{currentWorkspace.name}</span>
+                <ChevronRight className="h-3 w-3 shrink-0" />
                 <ProjectSwitcher variant="header" />
               </>
             )}
             {crumbs.map((c, i) => (
-              <span key={i} className="flex items-center gap-1.5">
-                <ChevronRight className="h-3 w-3" />
-                <span className={i === crumbs.length - 1 ? "text-foreground" : ""}>{c}</span>
+              <span key={i} className="hidden lg:flex items-center gap-1.5">
+                <ChevronRight className="h-3 w-3 shrink-0" />
+                <span className={i === crumbs.length - 1 ? "text-foreground font-medium" : ""}>{c}</span>
               </span>
             ))}
           </div>
@@ -296,16 +500,56 @@ function Logo() {
   );
 }
 
-const NOTIFICATIONS = [
-  { id: 1, tone: "ok", icon: CheckCircle2, title: "Architecture generated", body: "payments-platform · score 92", time: "2m" },
-  { id: 2, tone: "warn", icon: ShieldAlert, title: "Security warning", body: "Missing rate limit on /login", time: "18m" },
-  { id: 3, tone: "ok", icon: Package, title: "Export completed", body: "engineering-report.pdf · 4.2 MB", time: "1h" },
-  { id: 4, tone: "info", icon: Sparkles, title: "Documentation updated", body: "128 modules re-indexed", time: "3h" },
-  { id: 5, tone: "warn", icon: ShieldAlert, title: "Dependency risk", body: "3 packages need review", time: "yesterday" },
-  { id: 6, tone: "ok", icon: GitBranch, title: "Repository imported", body: "acme/identity-service", time: "2d" },
-] as const;
+function formatRelativeTime(dateString: string): string {
+  try {
+    const delta = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+    if (delta < 60) return "just now";
+    if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
+    if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
+    return `${Math.floor(delta / 86400)}d ago`;
+  } catch {
+    return "";
+  }
+}
 
 function NotificationsButton({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  const { data: notifications = [], isLoading } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: getNotifications,
+    staleTime: 10000,
+    refetchInterval: 30000,
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => markNotificationRead(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
+  const markAllMutation = useMutation({
+    mutationFn: () => markAllNotificationsRead(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const handleNotificationClick = (n: AppNotification) => {
+    if (!n.read) {
+      markReadMutation.mutate(n.id);
+    }
+    const target = (n.metadata?.route as string) || (n.metadata?.path as string);
+    if (target) {
+      onOpenChange(false);
+      navigate({ to: target as any });
+    }
+  };
+
   return (
     <div className="relative">
       <button
@@ -314,7 +558,11 @@ function NotificationsButton({ open, onOpenChange }: { open: boolean; onOpenChan
         aria-label="Notifications"
       >
         <Bell className="h-3.5 w-3.5" />
-        <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
+        {unreadCount > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-1 rounded-full bg-primary text-[9px] font-mono font-bold text-primary-foreground flex items-center justify-center">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
       </button>
       {open && (
         <>
@@ -325,37 +573,84 @@ function NotificationsButton({ open, onOpenChange }: { open: boolean; onOpenChan
                 Notifications
               </span>
               <span className="ml-auto text-[10px] font-mono text-muted-foreground">
-                {NOTIFICATIONS.length} events
+                {unreadCount > 0 ? `${unreadCount} unread` : `${notifications.length} total`}
               </span>
             </div>
             <div className="max-h-96 overflow-y-auto divide-y divide-border">
-              {NOTIFICATIONS.map((n) => {
-                const Icon = n.icon;
-                const tone =
-                  n.tone === "ok"
-                    ? "text-success"
-                    : n.tone === "warn"
+              {isLoading ? (
+                <div className="p-6 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                  Loading notifications…
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="p-6 text-center text-xs text-muted-foreground">
+                  No notifications yet
+                </div>
+              ) : (
+                notifications.map((n) => {
+                  const isErr = n.severity === "error";
+                  const isWarn = n.severity === "warning";
+                  const isSuccess = n.severity === "success";
+
+                  const Icon = isErr || isWarn
+                    ? ShieldAlert
+                    : isSuccess
+                      ? CheckCircle2
+                      : n.type?.includes("export")
+                        ? Package
+                        : Sparkles;
+
+                  const tone = isErr
+                    ? "text-destructive"
+                    : isWarn
                       ? "text-warning"
-                      : "text-info";
-                return (
-                  <div key={n.id} className="p-3 flex items-start gap-2.5 hover:bg-surface/50 transition-colors">
-                    <Icon className={"h-3.5 w-3.5 mt-0.5 shrink-0 " + tone} />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-medium truncate">{n.title}</div>
-                      <div className="text-[11px] text-muted-foreground truncate">{n.body}</div>
+                      : isSuccess
+                        ? "text-success"
+                        : "text-primary";
+
+                  return (
+                    <div
+                      key={n.id}
+                      onClick={() => handleNotificationClick(n)}
+                      className={`p-3 flex items-start gap-2.5 transition-colors cursor-pointer ${
+                        n.read ? "hover:bg-surface/50 opacity-75" : "bg-primary/5 hover:bg-primary/10"
+                      }`}
+                    >
+                      <Icon className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${tone}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-xs truncate ${!n.read ? "font-semibold text-foreground" : "font-medium"}`}>
+                            {n.title}
+                          </span>
+                          {!n.read && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                          )}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{n.message}</div>
+                      </div>
+                      <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                        {formatRelativeTime(n.created_at)}
+                      </span>
                     </div>
-                    <span className="text-[10px] font-mono text-muted-foreground shrink-0">{n.time}</span>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
             <div className="h-9 px-3 border-t border-border flex items-center justify-between">
-              <button className="text-[11px] font-mono text-muted-foreground hover:text-foreground">
-                Mark all as read
+              <button
+                onClick={() => markAllMutation.mutate()}
+                disabled={markAllMutation.isPending || unreadCount === 0}
+                className="text-[11px] font-mono text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
+              >
+                {markAllMutation.isPending ? "Marking…" : "Mark all as read"}
               </button>
-              <button className="text-[11px] font-mono text-primary hover:underline">
-                View history
-              </button>
+              <Link
+                to="/analytics"
+                onClick={() => onOpenChange(false)}
+                className="text-[11px] font-mono text-primary hover:underline"
+              >
+                Activity trail →
+              </Link>
             </div>
           </div>
         </>
@@ -409,9 +704,26 @@ function UserMenu({
               </div>
             </div>
             <div className="p-1 border-t border-border">
-              <MenuLink icon={User} label="Profile" />
-              <MenuLink icon={SettingsIcon} label="Account settings" to="/settings" onClick={() => onOpenChange(false)} />
-              <MenuLink icon={CommandIcon} label="Keyboard shortcuts" hint="⌘K" />
+              <MenuLink
+                icon={User}
+                label="Profile"
+                to="/settings"
+                search={{ tab: "general" }}
+                onClick={() => {
+                  onOpenChange(false);
+                  window.dispatchEvent(new CustomEvent("archforge:settings-tab", { detail: "general" }));
+                }}
+              />
+              <MenuLink
+                icon={SettingsIcon}
+                label="Account settings"
+                to="/settings"
+                search={{ tab: "general" }}
+                onClick={() => {
+                  onOpenChange(false);
+                  window.dispatchEvent(new CustomEvent("archforge:settings-tab", { detail: "general" }));
+                }}
+              />
               <MenuLink
                 icon={LogOut}
                 label="Sign out"
@@ -445,12 +757,14 @@ function MenuLink({
   label,
   hint,
   to,
+  search,
   onClick,
 }: {
   icon: typeof User;
   label: string;
   hint?: string;
   to?: string;
+  search?: Record<string, any>;
   onClick?: () => void;
 }) {
   const inner = (
@@ -462,7 +776,7 @@ function MenuLink({
   );
   if (to) {
     return (
-      <Link to={to} onClick={onClick}>
+      <Link to={to as any} search={search as any} onClick={onClick}>
         {inner}
       </Link>
     );

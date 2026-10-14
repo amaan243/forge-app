@@ -106,6 +106,15 @@ export interface CreateEdgeInput {
   metadata?: Record<string, unknown>;
 }
 
+export interface UpdateEdgeInput {
+  source_node_id?: string;
+  target_node_id?: string;
+  relationship?: ArchitectureRelationship;
+  protocol?: string | null;
+  description?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
 export interface UpdateVersionInput {
   name?: string;
   description?: string;
@@ -354,6 +363,19 @@ export async function createArchitectureEdge(
   return response.data.data;
 }
 
+export async function updateArchitectureEdge(
+  projectId: string,
+  versionId: string,
+  edgeId: string,
+  data: UpdateEdgeInput
+): Promise<ArchitectureEdge> {
+  const response = await apiClient.patch<{ success: boolean; data: ArchitectureEdge }>(
+    `/api/v1/projects/${projectId}/architecture/versions/${versionId}/edges/${edgeId}`,
+    data
+  );
+  return response.data.data;
+}
+
 export async function deleteArchitectureEdge(
   projectId: string,
   versionId: string,
@@ -362,6 +384,48 @@ export async function deleteArchitectureEdge(
   await apiClient.delete(
     `/api/v1/projects/${projectId}/architecture/versions/${versionId}/edges/${edgeId}`
   );
+}
+
+// ─── Node Explanation & Design Review API ─────────────────────────────────────
+
+export interface ArchitectureExplanation {
+  purpose: string;
+  responsibility: string;
+  technology: string;
+  dependencies: string[];
+  dataFlow: string;
+  failureScenarios: string[];
+  scalingConsiderations: string[];
+  securityConsiderations: string[];
+}
+
+export async function explainArchitectureNode(
+  projectId: string,
+  nodeId: string,
+  context?: string
+): Promise<ArchitectureExplanation> {
+  const response = await apiClient.post<{ success: boolean; data: ArchitectureExplanation }>(
+    `/api/v1/projects/${projectId}/architecture/nodes/${nodeId}/explain`,
+    { context }
+  );
+  return response.data.data;
+}
+
+export interface DesignReviewFinding {
+  finding: string;
+  severity: "high" | "medium" | "low";
+  evidence: string[];
+  explanation: string;
+  recommendation: string;
+  component_ids: string[];
+}
+
+export async function runDesignReview(projectId: string): Promise<DesignReviewFinding[]> {
+  const response = await apiClient.post<{ success: boolean; data: DesignReviewFinding[] }>(
+    `/api/v1/projects/${projectId}/design-review`,
+    {}
+  );
+  return response.data.data;
 }
 
 // ─── Compare API ──────────────────────────────────────────────────────────────

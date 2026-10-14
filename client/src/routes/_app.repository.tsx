@@ -44,6 +44,7 @@ import {
   disconnectRepository,
   triggerRepositoryAnalysis,
   getRepositoryAnalyses,
+  getRepositoryAnalysis,
   type RepositoryRecord,
   type RepositoryAnalysis,
   type DetectedFramework,
@@ -83,6 +84,25 @@ function RepositoryPage() {
   const [latestAttempt, setLatestAttempt] = useState<RepositoryAnalysis | null>(null);
   const [activeAnalysis, setActiveAnalysis] = useState<RepositoryAnalysis | null>(null);
   const [historyList, setHistoryList] = useState<RepositoryAnalysis[]>([]);
+
+  // Detail modal state
+  const [detailAnalysisId, setDetailAnalysisId] = useState<string | null>(null);
+  const [detailAnalysis, setDetailAnalysis] = useState<RepositoryAnalysis | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const handleViewDetail = async (analysisId: string) => {
+    if (!currentProject) return;
+    setDetailAnalysisId(analysisId);
+    setDetailLoading(true);
+    try {
+      const data = await getRepositoryAnalysis(currentProject.id, analysisId);
+      setDetailAnalysis(data);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || "Failed to load snapshot details");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   // Route search & filters
   const [routeQuery, setRouteQuery] = useState("");
@@ -1132,9 +1152,19 @@ function RepositoryPage() {
                       </div>
                     )}
                   </div>
-                  <div className="text-right text-[11px] font-mono text-muted-foreground">
-                    <div>{a.metrics?.routeCount ?? 0} routes</div>
-                    <div>{a.metrics?.dependencyCount ?? 0} dependencies</div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right text-[11px] font-mono text-muted-foreground">
+                      <div>{a.metrics?.routeCount ?? 0} routes</div>
+                      <div>{a.metrics?.dependencyCount ?? 0} dependencies</div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs font-mono"
+                      onClick={() => handleViewDetail(a.id)}
+                    >
+                      View Details
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -1340,6 +1370,139 @@ function RepositoryPage() {
               Disconnect Repository
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Snapshot Analysis Detail Modal */}
+      <Dialog
+        open={Boolean(detailAnalysisId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailAnalysisId(null);
+            setDetailAnalysis(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-primary" />
+              <span>Analysis Snapshot Details</span>
+              {detailAnalysis && (
+                <span className="font-mono text-xs text-muted-foreground ml-auto">
+                  {detailAnalysis.id.slice(0, 8)}
+                </span>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Detailed scan metrics, file counts, and findings for this snapshot.
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailLoading ? (
+            <div className="p-12 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              Loading snapshot record…
+            </div>
+          ) : detailAnalysis ? (
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
+                <div className="p-2.5 rounded border border-border bg-surface/50">
+                  <div className="text-[10px] text-muted-foreground uppercase">Status</div>
+                  <div className="font-semibold text-foreground capitalize mt-0.5">{detailAnalysis.status}</div>
+                </div>
+                <div className="p-2.5 rounded border border-border bg-surface/50">
+                  <div className="text-[10px] text-muted-foreground uppercase">Commit SHA</div>
+                  <div className="font-semibold text-foreground mt-0.5 truncate">
+                    {detailAnalysis.commit_sha ? detailAnalysis.commit_sha.slice(0, 7) : "N/A"}
+                  </div>
+                </div>
+                <div className="p-2.5 rounded border border-border bg-surface/50">
+                  <div className="text-[10px] text-muted-foreground uppercase">Branch</div>
+                  <div className="font-semibold text-foreground mt-0.5 truncate">{detailAnalysis.analysis_data?.branch || "main"}</div>
+                </div>
+                <div className="p-2.5 rounded border border-border bg-surface/50">
+                  <div className="text-[10px] text-muted-foreground uppercase">Analyzed</div>
+                  <div className="font-semibold text-foreground mt-0.5 truncate">
+                    {detailAnalysis.completed_at
+                      ? new Date(detailAnalysis.completed_at).toLocaleDateString()
+                      : "Pending"}
+                  </div>
+                </div>
+              </div>
+
+              {detailAnalysis.analysis_data?.fileCounts && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                    File Inventory
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
+                    <div className="p-2 rounded border border-border bg-background">
+                      <span className="text-muted-foreground">Discovered: </span>
+                      <span className="font-semibold">{detailAnalysis.analysis_data.fileCounts.totalFilesDiscovered}</span>
+                    </div>
+                    <div className="p-2 rounded border border-border bg-background">
+                      <span className="text-muted-foreground">Analyzed: </span>
+                      <span className="font-semibold text-success">{detailAnalysis.analysis_data.fileCounts.analyzedSourceFiles}</span>
+                    </div>
+                    <div className="p-2 rounded border border-border bg-background">
+                      <span className="text-muted-foreground">Manifests: </span>
+                      <span className="font-semibold text-primary">{detailAnalysis.analysis_data.fileCounts.manifestFilesProcessed}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {Array.isArray(detailAnalysis.analysis_data?.detectedFrameworks) && detailAnalysis.analysis_data.detectedFrameworks.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                    Detected Frameworks ({detailAnalysis.analysis_data.detectedFrameworks.length})
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detailAnalysis.analysis_data.detectedFrameworks.map((fw: any, idx: number) => (
+                      <span key={idx} className="h-6 px-2 rounded border border-border bg-surface font-mono text-[11px] flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3 text-primary" />
+                        {fw.name} {fw.version ? `v${fw.version}` : ""}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {detailAnalysis.metrics && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                    Parsed Metrics
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
+                    <div className="p-2 rounded border border-border bg-background">
+                      <span className="text-muted-foreground">Routes: </span>
+                      <span className="font-semibold">{detailAnalysis.metrics.routeCount ?? 0}</span>
+                    </div>
+                    <div className="p-2 rounded border border-border bg-background">
+                      <span className="text-muted-foreground">Dependencies: </span>
+                      <span className="font-semibold">{detailAnalysis.metrics.dependencyCount ?? 0}</span>
+                    </div>
+                    <div className="p-2 rounded border border-border bg-background">
+                      <span className="text-muted-foreground">Tests: </span>
+                      <span className="font-semibold">{detailAnalysis.metrics.testCount ?? 0}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {detailAnalysis.status === "failed" && detailAnalysis.analysis_data?.error && (
+                <div className="p-3 rounded border border-destructive/30 bg-destructive/10 text-destructive text-xs space-y-1">
+                  <div className="font-semibold">Analysis Failure Details</div>
+                  <div className="font-mono text-[11px]">{String(detailAnalysis.analysis_data.error)}</div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-8 text-center text-xs text-muted-foreground">
+              Snapshot details could not be found or loaded.
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

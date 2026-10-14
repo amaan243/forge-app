@@ -5,7 +5,7 @@ import { architectureEdgeCreate, architectureEdgeUpdate, architectureNodeCreate,
 import { versionComparisonService } from "../services/version-comparison-service.js";
 import { architectureRepository } from "../repositories/architecture-repository.js";
 import { ArchitectureExplanationService } from "../services/architecture-explanation-service.js";
-import { UnsupportedAIProvider } from "../integrations/ai-provider.js";
+import { getAIProvider } from "../integrations/ai-provider.js";
 import { ValidationError } from "../errors/app-error.js";
 const response = <T>(message: string, data: T) => ({ success: true, message, data });
 const userId = (request: Parameters<RequestHandler>[0]) => (request as unknown as AuthenticatedRequest).userId;
@@ -27,5 +27,5 @@ export const architectureController = {
   updateEdge: (async (request, res) => { res.json(response("Architecture edge updated", await architectureService.edgeUpdate(String(request.params.versionId), String(request.params.edgeId), architectureEdgeUpdate.parse(request.body)))); }) as RequestHandler,
   deleteEdge: (async (request, res) => { await architectureService.edgeDelete(String(request.params.versionId), String(request.params.edgeId)); res.status(204).send(); }) as RequestHandler,
   compare: (async (request, res) => { const query = compareQuery.parse(request.query); res.json(response("Architecture versions compared", await versionComparisonService.compare(String(request.params.projectId), query.from, query.to))); }) as RequestHandler,
-  explain: (async (request, res) => { const node = await architectureRepository.node(String(request.params.nodeId)); if (!node || (request.project && (await architectureService.getVersion(node.architecture_version_id)).version.project_id !== request.project.id)) throw new ValidationError({ nodeId: "Node not found" }); const architecture = await architectureService.getVersion(node.architecture_version_id); res.json(response("Architecture explanation generated", await new ArchitectureExplanationService(new UnsupportedAIProvider()).explain({ node, architecture, context: explanationRequest.parse(request.body).context }))); }) as RequestHandler,
+  explain: (async (request, res) => { const node = await architectureRepository.node(String(request.params.nodeId)); if (!node || (request.project && (await architectureService.getVersion(node.architecture_version_id)).version.project_id !== request.project.id)) throw new ValidationError({ nodeId: "Node not found" }); const architecture = await architectureService.getVersion(node.architecture_version_id); res.json(response("Architecture explanation generated", await new ArchitectureExplanationService(getAIProvider()).explain({ node, architecture, context: explanationRequest.parse(request.body).context }))); }) as RequestHandler,
 };

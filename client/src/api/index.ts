@@ -20,8 +20,14 @@ export {
   updateWorkspace,
   deleteWorkspace,
   getWorkspaceMembers,
+  addWorkspaceMember,
+  updateWorkspaceMember,
+  removeWorkspaceMember,
+  getWorkspaceSettings,
+  updateWorkspaceSettings,
   type Workspace,
   type WorkspaceMember,
+  type WorkspaceSettings,
   type CreateWorkspaceInput,
   type UpdateWorkspaceInput,
 } from "./workspaces";
@@ -63,7 +69,10 @@ export {
   updateArchitectureNode,
   deleteArchitectureNode,
   createArchitectureEdge,
+  updateArchitectureEdge,
   deleteArchitectureEdge,
+  explainArchitectureNode,
+  runDesignReview,
   type ArchitectureVersion,
   type ArchitectureVersionStatus,
   type ArchitectureNode,
@@ -71,9 +80,12 @@ export {
   type ArchitectureEdge,
   type ArchitectureRelationship,
   type ArchitectureGraph,
+  type ArchitectureExplanation,
+  type DesignReviewFinding,
   type CreateVersionInput,
   type CreateNodeInput,
   type CreateEdgeInput,
+  type UpdateEdgeInput,
   type UpdateVersionInput,
   type UpdateNodeInput,
   type CopyVersionInput,
@@ -85,11 +97,14 @@ export {
   disconnectRepository,
   triggerRepositoryAnalysis,
   getRepositoryAnalyses,
+  getRepositoryAnalysis,
   getLatestAnalysis,
   getDependencies,
   runDriftAnalysis,
   getDriftAnalyses,
   getDriftAnalysis,
+  getDriftFinding,
+  getDriftFindings,
   getDriftRemediation,
   type RepositoryRecord,
   type RepositoryAnalysis,
@@ -210,3 +225,62 @@ export {
   type KnowledgeGraphNeighborhood,
   type QueryKnowledgeGraphParams,
 } from "./knowledge-graph";
+
+export {
+  getProjectExports,
+  createProjectExport,
+  getExport,
+  getProjectExportData,
+  getProjectAuditEvents,
+  type ExportType,
+  type ExportFormat,
+  type ExportStatus,
+  type ProjectExport,
+  type CreateExportInput,
+  type AuditEvent,
+} from "./exports";
+
+export {
+  getProjectAnalytics,
+  getProjectInsights,
+  type AnalyticsMetrics,
+  type AnalyticsSnapshot,
+  type ProjectInsights,
+  type AnalyticsQueryParams,
+} from "./analytics";
+
+export {
+  getProjectStory,
+  generateProjectStory,
+  type ProjectStory,
+  type ProjectStoryContent,
+} from "./story";
+
+export {
+  getNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  type AppNotification,
+} from "./notifications";
+
+export {
+  getUserSettings,
+  updateUserSettings,
+  getUserProfile,
+  updateUserProfile,
+  type UserSettings,
+  type UpdateSettingsInput,
+  type UpdateProfileInput,
+} from "./settings";
+
+export {
+  searchGlobal,
+  type GlobalSearchResults,
+  type SearchProjectResult,
+  type SearchNodeResult,
+  type SearchDocumentationResult,
+  type SearchRepositoryResult,
+  type SearchSnapshotResult,
+  type SearchTimelineResult,
+} from "./search";
+

@@ -15,6 +15,9 @@ export class DriftRemediationService {
 
   async remediation(input: unknown): Promise<DriftRemediation> {
     try {
+      if (typeof (this.provider as any).remediateDrift === "function") {
+        return await (this.provider as any).remediateDrift(input);
+      }
       return await this.provider.structuredOutput<DriftRemediation>({
         prompt: JSON.stringify(input),
         schema: "DriftRemediation",

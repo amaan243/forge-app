@@ -1,11 +1,40 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { BarChart3, TrendingUp, Activity, ShieldAlert, Package, Database, FileText, Layers, PieChart } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  BarChart3,
+  TrendingUp,
+  Activity,
+  ShieldAlert,
+  Package,
+  Database,
+  FileText,
+  Layers,
+  PieChart,
+  RotateCw,
+  FolderOpen,
+  CheckCircle2,
+  AlertTriangle,
+  Loader2,
+  Info,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useWorkspace } from "@/lib/workspace-context";
+import { ProjectSwitcher } from "@/components/project-switcher";
+import {
+  getProjectAnalytics,
+  getProjectInsights,
+  type AnalyticsSnapshot,
+  type ProjectInsights,
+} from "@/api";
 
 export const Route = createFileRoute("/_app/analytics")({
   head: () => ({
     meta: [
       { title: "Analytics — ArchForge" },
-      { name: "description", content: "Track generation throughput, architecture scores, and pipeline health over time." },
+      {
+        name: "description",
+        content: "Track generation throughput, architecture scores, and pipeline health over time.",
+      },
       { property: "og:title", content: "Analytics — ArchForge" },
       { property: "og:description", content: "Generation throughput, architecture scores, and pipeline health." },
     ],
@@ -13,263 +42,352 @@ export const Route = createFileRoute("/_app/analytics")({
   component: AnalyticsPage,
 });
 
-const SCORE = [42, 55, 48, 63, 71, 68, 82, 79, 88, 92, 87, 94];
-const GROWTH = [12, 18, 22, 30, 34, 41, 52, 58, 63, 71, 78, 84];
-const DOCS = [40, 45, 48, 52, 60, 63, 66, 68, 70, 72, 72, 74];
-const SEC = [55, 60, 62, 65, 63, 68, 70, 72, 74, 78, 80, 82];
-const DEP_HEALTH = [80, 78, 82, 84, 81, 85, 87, 86, 88, 89, 91, 90];
-
-const LANGS = [
-  { name: "TypeScript", pct: 68, color: "bg-primary" },
-  { name: "SQL", pct: 12, color: "bg-info" },
-  { name: "Shell", pct: 8, color: "bg-success" },
-  { name: "YAML", pct: 7, color: "bg-warning" },
-  { name: "Other", pct: 5, color: "bg-muted-foreground/50" },
-];
-
-const SERVICES = [
-  { name: "Payments", pct: 28 },
-  { name: "Auth", pct: 20 },
-  { name: "User", pct: 18 },
-  { name: "Notifications", pct: 14 },
-  { name: "Gateway", pct: 12 },
-  { name: "Workers", pct: 8 },
-];
-
-import { ProjectSwitcher } from "@/components/project-switcher";
-
 function AnalyticsPage() {
+  const { currentProject } = useWorkspace();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsSnapshot | AnalyticsSnapshot[] | null>(null);
+  const [insights, setInsights] = useState<ProjectInsights | null>(null);
+
+  const fetchAnalytics = useCallback(async () => {
+    if (!currentProject) {
+      setAnalyticsData(null);
+      setInsights(null);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const [analyticsRes, insightsRes] = await Promise.all([
+        getProjectAnalytics(currentProject.id),
+        getProjectInsights(currentProject.id),
+      ]);
+      setAnalyticsData(analyticsRes);
+      setInsights(insightsRes);
+    } catch (err: any) {
+      console.error("Failed to load project analytics:", err);
+      setError(err.response?.data?.message || err.message || "Failed to load analytics");
+    } finally {
+      setLoading(false);
+    }
+  }, [currentProject]);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
+
+  const currentSnapshot: AnalyticsSnapshot | null = useMemo(() => {
+    if (!analyticsData) return null;
+    if (Array.isArray(analyticsData)) {
+      return analyticsData[0] || null;
+    }
+    return analyticsData;
+  }, [analyticsData]);
+
+  const historicalSnapshots: AnalyticsSnapshot[] = useMemo(() => {
+    if (!analyticsData) return [];
+    if (Array.isArray(analyticsData)) return analyticsData;
+    return [analyticsData];
+  }, [analyticsData]);
+
+  const metrics = currentSnapshot?.metrics;
+
+  const docCoveragePct = metrics?.documentationCoverage !== undefined
+    ? Math.round(Number(metrics.documentationCoverage) * 100)
+    : null;
+
+  const driftScore = metrics?.driftScore !== null && metrics?.driftScore !== undefined
+    ? Number(metrics.driftScore)
+    : null;
+
+  const complexity = metrics?.architectureComplexity ?? (insights?.architectureComplexity ?? null);
+
   return (
     <div className="p-6 lg:p-8 space-y-6">
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div className="space-y-2">
-          <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Rolling 12 weeks</div>
-          <h1 className="text-2xl font-display font-semibold tracking-tight">Analytics</h1>
-          <p className="text-sm text-muted-foreground">Objective signals across architecture, documentation, and code health.</p>
+          <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+            Project: {currentProject ? currentProject.name : "Select Project"}
+          </div>
+          <h1 className="text-2xl font-display font-semibold tracking-tight">Analytics & Insights</h1>
+          <p className="text-sm text-muted-foreground">
+            Objective verification signals calculated across architecture, repository scans, and documentation.
+          </p>
         </div>
-        <ProjectSwitcher variant="inline" />
+        <div className="flex items-center gap-2">
+          <ProjectSwitcher variant="inline" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchAnalytics}
+            disabled={loading || !currentProject}
+            title="Refresh analytics data"
+          >
+            <RotateCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
       </header>
 
-      <div className="grid md:grid-cols-4 gap-3">
-        {[
-          { icon: TrendingUp, label: "Generations", value: "312", delta: "+18%" },
-          { icon: Activity, label: "Avg score", value: "87.4", delta: "+3.2" },
-          { icon: ShieldAlert, label: "Security posture", value: "B+", delta: "+1" },
-          { icon: Package, label: "Dep health", value: "91%", delta: "+4" },
-        ].map((s) => {
-          const Icon = s.icon;
-          return (
-            <div key={s.label} className="surface-panel p-3.5 space-y-2">
-              <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                <Icon className="h-3.5 w-3.5" /> {s.label}
+      {!currentProject ? (
+        <div className="surface-panel p-8 text-center space-y-3">
+          <FolderOpen className="h-8 w-8 text-muted-foreground mx-auto" />
+          <h3 className="text-sm font-semibold">No Project Selected</h3>
+          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+            Select a project from the workspace switcher above to view verified analytics.
+          </p>
+        </div>
+      ) : loading ? (
+        <div className="surface-panel p-12 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <span className="text-xs font-mono">Aggregating project verification signals…</span>
+        </div>
+      ) : error ? (
+        <div className="surface-panel p-6 border-destructive/30 bg-destructive/5 space-y-3">
+          <div className="flex items-center gap-2 text-destructive text-sm font-medium">
+            <AlertTriangle className="h-4 w-4" />
+            <span>Failed to load project analytics</span>
+          </div>
+          <p className="text-xs text-muted-foreground">{error}</p>
+          <Button size="sm" variant="outline" onClick={fetchAnalytics}>
+            Retry
+          </Button>
+        </div>
+      ) : (
+        <>
+          {/* Key Objective Metrics Cards */}
+          <div className="grid md:grid-cols-4 gap-3">
+            <div className="surface-panel p-3.5 space-y-2">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <BarChart3 className="h-3.5 w-3.5 text-primary" /> Complexity
+                </span>
+                <span className="text-[10px] text-muted-foreground">Nodes + Edges</span>
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-display font-semibold tabular-nums">{s.value}</span>
-                <span className="text-xs font-mono text-success">{s.delta}</span>
+                <span className="text-2xl font-display font-semibold tabular-nums">
+                  {complexity !== null ? complexity : "—"}
+                </span>
+                <span className="text-xs font-mono text-muted-foreground">elements</span>
+              </div>
+              <div className="text-[10px] text-muted-foreground truncate">
+                {metrics?.architectureNodes ?? 0} nodes · {metrics?.architectureEdges ?? 0} edges
               </div>
             </div>
-          );
-        })}
-      </div>
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <ChartCard icon={BarChart3} title="Architecture complexity score" data={SCORE} format={(v) => v.toString()} />
-        <LineCard icon={TrendingUp} title="Repository growth (loc, k)" data={GROWTH} />
-        <LineCard icon={FileText} title="Documentation coverage (%)" data={DOCS} />
-        <LineCard icon={ShieldAlert} title="Security score" data={SEC} />
-        <LineCard icon={Package} title="Dependency health (%)" data={DEP_HEALTH} />
-        <HealthTimeline />
-      </div>
-
-      <div className="grid lg:grid-cols-3 gap-4">
-        <DonutCard icon={Layers} title="Language distribution" items={LANGS} />
-        <BarCategoriesCard icon={PieChart} title="Service distribution" items={SERVICES} />
-        <MetricsList />
-      </div>
-    </div>
-  );
-}
-
-function ChartCard({ icon: Icon, title, data, format }: { icon: typeof BarChart3; title: string; data: number[]; format?: (v: number) => string }) {
-  const max = Math.max(...data);
-  return (
-    <div className="surface-panel">
-      <div className="h-9 px-3 flex items-center border-b border-border text-[11px] font-mono uppercase tracking-wider text-muted-foreground gap-2">
-        <Icon className="h-3.5 w-3.5" /> {title}
-      </div>
-      <div className="p-6 h-56 flex items-end gap-2">
-        {data.map((v, i) => (
-          <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
-            <div className="w-full bg-primary/70 group-hover:bg-primary transition-colors rounded-sm relative" style={{ height: `${(v / max) * 100}%` }}>
-              <div className="opacity-0 group-hover:opacity-100 absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-mono bg-panel border border-border rounded px-1 whitespace-nowrap">
-                {format ? format(v) : v}
+            <div className="surface-panel p-3.5 space-y-2">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Activity className="h-3.5 w-3.5 text-info" /> Drift Score
+                </span>
+                <span className="text-[10px] text-muted-foreground">Spec vs Code</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-display font-semibold tabular-nums">
+                  {driftScore !== null ? `${driftScore}%` : "—"}
+                </span>
+                {driftScore !== null && (
+                  <span
+                    className={`text-xs font-mono ${
+                      driftScore >= 80 ? "text-success" : driftScore >= 60 ? "text-primary" : "text-warning"
+                    }`}
+                  >
+                    {driftScore >= 80 ? "Aligned" : "Drifting"}
+                  </span>
+                )}
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                {driftScore !== null ? "Calculated from drift analysis" : "No drift scan run yet"}
               </div>
             </div>
-            <span className="text-[10px] font-mono text-muted-foreground">w{i + 1}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
-function LineCard({ icon: Icon, title, data }: { icon: typeof BarChart3; title: string; data: number[] }) {
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  const w = 400;
-  const h = 140;
-  const points = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * w;
-    const y = h - ((v - min) / (max - min || 1)) * h;
-    return `${x},${y}`;
-  });
-  const path = "M " + points.join(" L ");
-  const area = `${path} L ${w},${h} L 0,${h} Z`;
-  return (
-    <div className="surface-panel">
-      <div className="h-9 px-3 flex items-center border-b border-border text-[11px] font-mono uppercase tracking-wider text-muted-foreground gap-2">
-        <Icon className="h-3.5 w-3.5" /> {title}
-      </div>
-      <div className="p-4">
-        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-40">
-          {[0.25, 0.5, 0.75].map((f) => (
-            <line key={f} x1="0" y1={h * f} x2={w} y2={h * f} stroke="currentColor" strokeWidth="0.5" className="text-border" />
-          ))}
-          <path d={area} className="fill-primary/10" />
-          <path d={path} className="stroke-primary" fill="none" strokeWidth="1.5" />
-          {data.map((_, i) => {
-            const [x, y] = points[i].split(",");
-            return <circle key={i} cx={x} cy={y} r="1.75" className="fill-primary" />;
-          })}
-        </svg>
-        <div className="flex justify-between mt-2 text-[10px] font-mono text-muted-foreground">
-          <span>12w ago</span>
-          <span>latest · {data[data.length - 1]}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HealthTimeline() {
-  const events = [
-    { w: "w03", label: "Auth refactor", tone: "primary" },
-    { w: "w05", label: "Vuln patched", tone: "success" },
-    { w: "w07", label: "Perf regression", tone: "warning" },
-    { w: "w09", label: "New microservice", tone: "primary" },
-    { w: "w11", label: "Docs sprint", tone: "success" },
-  ];
-  return (
-    <div className="surface-panel">
-      <div className="h-9 px-3 flex items-center border-b border-border text-[11px] font-mono uppercase tracking-wider text-muted-foreground gap-2">
-        <Activity className="h-3.5 w-3.5" /> Health timeline
-      </div>
-      <div className="p-4 space-y-2 text-xs">
-        {events.map((e) => (
-          <div key={e.w} className="flex items-center gap-3">
-            <span className="w-10 font-mono text-[10px] text-muted-foreground">{e.w}</span>
-            <span className={"h-2 w-2 rounded-full " + (e.tone === "success" ? "bg-success" : e.tone === "warning" ? "bg-warning" : "bg-primary")} />
-            <span className="flex-1">{e.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DonutCard({ icon: Icon, title, items }: { icon: typeof BarChart3; title: string; items: { name: string; pct: number; color: string }[] }) {
-  let cumulative = 0;
-  const segments = items.map((it) => {
-    const start = cumulative;
-    cumulative += it.pct;
-    return { ...it, start, end: cumulative };
-  });
-  const R = 30;
-  const C = 2 * Math.PI * R;
-  return (
-    <div className="surface-panel">
-      <div className="h-9 px-3 flex items-center border-b border-border text-[11px] font-mono uppercase tracking-wider text-muted-foreground gap-2">
-        <Icon className="h-3.5 w-3.5" /> {title}
-      </div>
-      <div className="p-4 flex items-center gap-4">
-        <svg viewBox="0 0 80 80" className="h-24 w-24 -rotate-90">
-          {segments.map((s, i) => {
-            const dash = (s.pct / 100) * C;
-            const offset = -(s.start / 100) * C;
-            return (
-              <circle
-                key={i}
-                cx="40"
-                cy="40"
-                r={R}
-                fill="none"
-                strokeWidth="12"
-                stroke="currentColor"
-                className={s.color.replace("bg-", "text-")}
-                strokeDasharray={`${dash} ${C - dash}`}
-                strokeDashoffset={offset}
-              />
-            );
-          })}
-        </svg>
-        <div className="flex-1 space-y-1 text-xs">
-          {items.map((it) => (
-            <div key={it.name} className="flex items-center gap-2">
-              <span className={"h-2 w-2 rounded-sm " + it.color} />
-              <span className="flex-1 truncate">{it.name}</span>
-              <span className="font-mono text-muted-foreground">{it.pct}%</span>
+            <div className="surface-panel p-3.5 space-y-2">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <FileText className="h-3.5 w-3.5 text-success" /> Documentation
+                </span>
+                <span className="text-[10px] text-muted-foreground">Coverage</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-display font-semibold tabular-nums">
+                  {docCoveragePct !== null ? `${docCoveragePct}%` : "—"}
+                </span>
+                <span className="text-xs font-mono text-muted-foreground">up-to-date</span>
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                {insights?.documentationStatus?.up_to_date ?? 0} valid docs in registry
+              </div>
             </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
-function BarCategoriesCard({ icon: Icon, title, items }: { icon: typeof BarChart3; title: string; items: { name: string; pct: number }[] }) {
-  return (
-    <div className="surface-panel">
-      <div className="h-9 px-3 flex items-center border-b border-border text-[11px] font-mono uppercase tracking-wider text-muted-foreground gap-2">
-        <Icon className="h-3.5 w-3.5" /> {title}
-      </div>
-      <div className="p-4 space-y-2 text-xs">
-        {items.map((it) => (
-          <div key={it.name} className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span>{it.name}</span>
-              <span className="font-mono text-muted-foreground">{it.pct}%</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-surface overflow-hidden">
-              <div className="h-full bg-primary/70" style={{ width: `${it.pct * 3}%` }} />
+            <div className="surface-panel p-3.5 space-y-2">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Package className="h-3.5 w-3.5 text-warning" /> Dependencies
+                </span>
+                <span className="text-[10px] text-muted-foreground">Parsed</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-display font-semibold tabular-nums">
+                  {metrics?.repositoryDependencies ?? 0}
+                </span>
+                <span className="text-xs font-mono text-muted-foreground">packages</span>
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                {insights?.repositoryHealth ? "Verified in repository scan" : "Connect repo to scan"}
+              </div>
             </div>
           </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
-function MetricsList() {
-  return (
-    <div className="surface-panel">
-      <div className="h-9 px-3 flex items-center border-b border-border text-[11px] font-mono uppercase tracking-wider text-muted-foreground gap-2">
-        <Database className="h-3.5 w-3.5" /> Data metrics
-      </div>
-      <div className="p-4 space-y-2 text-xs">
-        {[
-          ["Database tables", "42"],
-          ["Relationships", "78"],
-          ["Indexes", "126"],
-          ["API endpoints", "126"],
-          ["Webhooks", "18"],
-          ["Background jobs", "22"],
-        ].map(([k, v]) => (
-          <div key={k} className="flex items-center justify-between">
-            <span className="text-muted-foreground">{k}</span>
-            <span className="font-mono">{v}</span>
+          {/* Detailed Structural Factor Breakdown */}
+          <div className="grid lg:grid-cols-2 gap-4">
+            {/* Architecture Composition Panel */}
+            <div className="surface-panel">
+              <div className="h-9 px-3 flex items-center border-b border-border text-[11px] font-mono uppercase tracking-wider text-muted-foreground gap-2">
+                <Layers className="h-3.5 w-3.5" /> Architecture Baseline Composition
+              </div>
+              <div className="p-4 space-y-4">
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="p-3 rounded border border-border bg-surface/40">
+                    <div className="text-xl font-display font-semibold">
+                      {insights?.architectureVersions ?? metrics?.architectureVersions ?? 0}
+                    </div>
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase mt-0.5">
+                      Saved Versions
+                    </div>
+                  </div>
+                  <div className="p-3 rounded border border-border bg-surface/40">
+                    <div className="text-xl font-display font-semibold">
+                      {metrics?.architectureNodes ?? 0}
+                    </div>
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase mt-0.5">
+                      Active Nodes
+                    </div>
+                  </div>
+                  <div className="p-3 rounded border border-border bg-surface/40">
+                    <div className="text-xl font-display font-semibold">
+                      {metrics?.architectureEdges ?? 0}
+                    </div>
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase mt-0.5">
+                      Active Edges
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <div className="flex items-center gap-1.5 text-foreground font-medium">
+                    <Info className="h-3.5 w-3.5 text-primary" /> Calculation Source
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    Evaluated from persisted architecture versions and canvas elements for{" "}
+                    <span className="text-foreground font-mono">{currentProject.name}</span>. Version immutability
+                    guarantees historical integrity across releases.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Repository Scan Status Panel */}
+            <div className="surface-panel">
+              <div className="h-9 px-3 flex items-center border-b border-border text-[11px] font-mono uppercase tracking-wider text-muted-foreground gap-2">
+                <Database className="h-3.5 w-3.5" /> Repository Analysis Verification
+              </div>
+              <div className="p-4 space-y-3">
+                {insights?.repositoryHealth ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground font-mono">Status:</span>
+                      <span className="text-success font-mono font-medium flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Completed Scan
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground font-mono">Commit SHA:</span>
+                      <span className="font-mono text-foreground">
+                        {insights.repositoryHealth.commit_sha
+                          ? String(insights.repositoryHealth.commit_sha).slice(0, 8)
+                          : "latest"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground font-mono">Dependencies Tracked:</span>
+                      <span className="font-mono text-foreground">
+                        {metrics?.repositoryDependencies ?? 0} packages
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground font-mono">Last Scanned:</span>
+                      <span className="font-mono text-muted-foreground text-[11px]">
+                        {insights.repositoryHealth.created_at
+                          ? new Date(insights.repositoryHealth.created_at).toLocaleString()
+                          : "Recent"}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-xs text-muted-foreground space-y-2">
+                    <p>No repository analysis recorded for this project yet.</p>
+                    <p className="text-[11px] text-muted-foreground/80">
+                      Navigate to the Repository tab to connect a Git repository and run a scan.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Documentation Breakdown Panel */}
+            <div className="surface-panel">
+              <div className="h-9 px-3 flex items-center border-b border-border text-[11px] font-mono uppercase tracking-wider text-muted-foreground gap-2">
+                <FileText className="h-3.5 w-3.5" /> Documentation Health Distribution
+              </div>
+              <div className="p-4 space-y-3">
+                {insights?.documentationStatus && Object.keys(insights.documentationStatus).length > 0 ? (
+                  <div className="space-y-2">
+                    {Object.entries(insights.documentationStatus).map(([statusKey, count]) => (
+                      <div key={statusKey} className="flex items-center justify-between text-xs">
+                        <span className="font-mono capitalize text-muted-foreground">
+                          {statusKey.replace(/_/g, " ")}:
+                        </span>
+                        <span className="font-mono font-semibold text-foreground">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-xs text-muted-foreground">
+                    No documentation records generated yet.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Simulation & Story Readiness */}
+            <div className="surface-panel">
+              <div className="h-9 px-3 flex items-center border-b border-border text-[11px] font-mono uppercase tracking-wider text-muted-foreground gap-2">
+                <TrendingUp className="h-3.5 w-3.5" /> Intelligence & Simulation Activity
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-mono">Playground Simulations:</span>
+                  <span className="font-mono font-semibold text-foreground">
+                    {insights?.simulationCount ?? metrics?.simulationCount ?? 0}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-mono">Story Mode Generated:</span>
+                  <span className={`font-mono font-medium ${insights?.storyAvailable ? "text-success" : "text-muted-foreground"}`}>
+                    {insights?.storyAvailable ? "Ready" : "Not yet generated"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-mono">Snapshot Date:</span>
+                  <span className="font-mono text-muted-foreground text-[11px]">
+                    {currentSnapshot?.snapshot_date || "Current"}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-        ))}
-      </div>
+        </>
+      )}
     </div>
   );
 }

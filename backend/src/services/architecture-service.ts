@@ -2,8 +2,10 @@ import { ConflictError, NotFoundError, ValidationError } from "../errors/app-err
 import { architectureRepository } from "../repositories/architecture-repository.js";
 import { projectRepository } from "../repositories/project-repository.js";
 import { engineeringRepository } from "../repositories/engineering-intelligence-repository.js";
-import type { ArchitectureVersion } from "../types/architecture.js";
+import type { ArchitectureVersion, GeneratedArchitecture } from "../types/architecture.js";
 import { DeterministicArchitectureGenerator } from "./deterministic-architecture-generator.js";
+import { getAIProvider, isAIConfigured } from "../integrations/ai-provider.js";
+import { logger } from "../lib/logger.js";
 
 export const architectureService = {
   async getCurrent(projectId: string) {
@@ -51,11 +53,35 @@ export const architectureService = {
         requirements: "Project must have at least one requirement to generate architecture. Please add requirements first.",
       });
     }
+
+    if (isAIConfigured()) {
+      try {
+        const provider = getAIProvider();
+        const reqSummary = requirements
+          .map((r) => `[${(r as any).priority || "requirement"}] ${(r as any).title}: ${(r as any).description || ""}`)
+          .join("\n");
+        const aiArch = (await provider.generate({
+          requirements: reqSummary,
+          projectName: project.name,
+        })) as GeneratedArchitecture;
+        return {
+          preview: true,
+          architecture: aiArch,
+          provider: "groq",
+        };
+      } catch (err: any) {
+        logger.warn("Groq AI architecture generation failed, using deterministic fallback:", {
+          message: err?.message,
+        });
+      }
+    }
+
     const generator = new DeterministicArchitectureGenerator();
     const architecture = generator.generate(requirements, project.name);
     return {
       preview: true,
       architecture,
+      provider: "deterministic",
     };
   },
 

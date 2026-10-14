@@ -253,9 +253,9 @@ function EngineeringQualityPage() {
     return (
       <div className="p-8">
         <EmptyState
-          icon={ShieldCheck}
+          glyph="pulse"
           title="Select a project"
-          description="Choose a project from the top bar to inspect its engineering quality gate and release readiness."
+          body="Choose a project from the top bar to inspect its engineering quality gate and release readiness."
         />
       </div>
     );
@@ -966,7 +966,7 @@ function BaselineComparisonTab({ comparison }: { comparison: QualityReport["base
           <div className="bg-background/60 p-2.5 rounded border border-border/60">
             <span className="text-muted-foreground text-[10px] block">Drift Score Delta</span>
             <span className="text-foreground font-bold text-base">
-              {metricDeltas.driftMatchScoreDelta !== undefined
+              {metricDeltas.driftMatchScoreDelta != null
                 ? `${metricDeltas.driftMatchScoreDelta >= 0 ? "+" : ""}${metricDeltas.driftMatchScoreDelta}%`
                 : "0%"}
             </span>

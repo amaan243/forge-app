@@ -133,6 +133,11 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("archforge-theme") || "slate";
+    document.documentElement.setAttribute("data-theme", savedTheme);
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>

@@ -10,6 +10,7 @@ platformRoutes.use(requireAuth);
 const exportLimit = rateLimit({ windowMs: env.RATE_LIMIT_WINDOW_MS, limit: 20, standardHeaders: "draft-8", legacyHeaders: false });
 platformRoutes.get("/analytics", requireProjectMember, platformController.analytics);
 platformRoutes.post("/exports", requireProjectEditor, exportLimit, platformController.createExport);
+platformRoutes.get("/exports", requireProjectMember, platformController.listExports);
 platformRoutes.get("/exports/:exportId", requireProjectMember, platformController.getExport);
 platformRoutes.get("/audit", requireProjectMember, platformController.audit);
 platformRoutes.get("/export-data", requireProjectMember, platformController.projectExportData);

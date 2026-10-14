@@ -72,3 +72,59 @@ export async function getWorkspaceMembers(id: string): Promise<WorkspaceMember[]
   );
   return response.data.data;
 }
+
+export async function addWorkspaceMember(
+  workspaceId: string,
+  input: { user_id: string; role?: "admin" | "member" | "viewer" }
+): Promise<WorkspaceMember> {
+  const response = await apiClient.post<{ success: boolean; data: WorkspaceMember }>(
+    `/api/v1/workspaces/${workspaceId}/members`,
+    input
+  );
+  return response.data.data;
+}
+
+export async function updateWorkspaceMember(
+  workspaceId: string,
+  memberId: string,
+  input: { role: "admin" | "member" | "viewer" }
+): Promise<WorkspaceMember> {
+  const response = await apiClient.patch<{ success: boolean; data: WorkspaceMember }>(
+    `/api/v1/workspaces/${workspaceId}/members/${memberId}`,
+    input
+  );
+  return response.data.data;
+}
+
+export async function removeWorkspaceMember(
+  workspaceId: string,
+  memberId: string
+): Promise<void> {
+  await apiClient.delete(`/api/v1/workspaces/${workspaceId}/members/${memberId}`);
+}
+
+export interface WorkspaceSettings {
+  workspace_id: string;
+  visibility: "private" | "workspace";
+  default_architecture_settings: Record<string, unknown>;
+  updated_at: string;
+}
+
+export async function getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings> {
+  const response = await apiClient.get<{ success: boolean; data: WorkspaceSettings }>(
+    `/api/v1/workspaces/${workspaceId}/settings`
+  );
+  return response.data.data;
+}
+
+export async function updateWorkspaceSettings(
+  workspaceId: string,
+  input: { visibility?: "private" | "workspace"; default_architecture_settings?: Record<string, unknown> }
+): Promise<WorkspaceSettings> {
+  const response = await apiClient.patch<{ success: boolean; data: WorkspaceSettings }>(
+    `/api/v1/workspaces/${workspaceId}/settings`,
+    input
+  );
+  return response.data.data;
+}
+

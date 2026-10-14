@@ -42,6 +42,7 @@ describe("API foundation", () => {
       "/api/v1/projects/00000000-0000-0000-0000-000000000001/drift/00000000-0000-0000-0000-000000000002/findings",
       "/api/v1/projects/00000000-0000-0000-0000-000000000001/quality/context",
       "/api/v1/projects/00000000-0000-0000-0000-000000000001/quality/reports",
+      "/api/v1/projects/00000000-0000-0000-0000-000000000001/exports",
     ]) { const response = await request(app).get(path); expect(response.status).toBe(401); }
   });
 
@@ -58,8 +59,15 @@ describe("API foundation", () => {
     expect(response.body).toMatchObject({ status: expect.any(String), database: expect.any(String), redis: expect.any(String) });
   });
 
-  it("protects global search and notifications", async () => {
+  it("protects global search, notifications, settings, and node explanation endpoints", async () => {
     expect((await request(app).get("/api/v1/search?q=api")).status).toBe(401);
     expect((await request(app).get("/api/v1/notifications")).status).toBe(401);
+    expect((await request(app).patch("/api/v1/notifications/00000000-0000-0000-0000-000000000001/read")).status).toBe(401);
+    expect((await request(app).post("/api/v1/notifications/read-all")).status).toBe(401);
+    expect((await request(app).get("/api/v1/settings")).status).toBe(401);
+    expect((await request(app).patch("/api/v1/settings").send({ theme: "dark" })).status).toBe(401);
+    expect((await request(app).post("/api/v1/projects/00000000-0000-0000-0000-000000000001/architecture/nodes/00000000-0000-0000-0000-000000000002/explain")).status).toBe(401);
+    expect((await request(app).post("/api/v1/projects/00000000-0000-0000-0000-000000000001/design-review")).status).toBe(401);
+    expect((await request(app).patch("/api/v1/projects/00000000-0000-0000-0000-000000000001/architecture/versions/00000000-0000-0000-0000-000000000002/edges/00000000-0000-0000-0000-000000000003").send({ label: "calls" })).status).toBe(401);
   });
 });

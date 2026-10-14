@@ -464,3 +464,25 @@ export async function getDriftFindings(
   return response.data.data;
 }
 
+export async function getRepositoryAnalysis(
+  projectId: string,
+  analysisId: string
+): Promise<RepositoryAnalysis> {
+  const response = await apiClient.get<{ success: boolean; data: RepositoryAnalysis }>(
+    `/api/v1/projects/${projectId}/repository/analysis/${analysisId}`
+  );
+  return response.data.data;
+}
+
+export async function getDriftFinding(
+  projectId: string,
+  analysisId: string,
+  findingId: string
+): Promise<DriftItem> {
+  const response = await apiClient.get<{ success: boolean; data: DriftItem }>(
+    `/api/v1/projects/${projectId}/drift/${analysisId}/findings/${findingId}`
+  );
+  return response.data.data;
+}
+
+
