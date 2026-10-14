@@ -235,7 +235,7 @@ function StoryPage() {
   ];
 
   return (
-    <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div className="space-y-2">
           <div className="text-[11px] font-mono uppercase tracking-wider text-primary flex items-center gap-2">
@@ -382,7 +382,7 @@ function StoryPage() {
 
       {/* Full-Screen Presentation Mode Modal */}
       {isPresenting && (
-        <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-md flex flex-col p-6 sm:p-12">
+        <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-md flex flex-col p-4 sm:p-8 lg:p-12 overflow-y-auto">
           <div className="flex items-center justify-between pb-4 border-b border-border">
             <div className="flex items-center gap-2">
               <span className="text-xs font-mono uppercase tracking-wider text-primary">Slide</span>
@@ -401,16 +401,16 @@ function StoryPage() {
             </Button>
           </div>
 
-          <div className="flex-1 flex flex-col justify-center max-w-3xl mx-auto w-full py-8">
-            <div className="space-y-2 mb-8">
+          <div className="flex-1 flex flex-col justify-center max-w-3xl mx-auto w-full py-4 sm:py-8">
+            <div className="space-y-2 mb-4 sm:mb-8">
               <div className="text-xs font-mono text-primary uppercase tracking-wider">
                 {slides[slideIndex].index} · {slides[slideIndex].subtitle}
               </div>
-              <h1 className="text-3xl sm:text-4xl font-display font-semibold">
+              <h1 className="text-2xl sm:text-4xl font-display font-semibold">
                 {slides[slideIndex].title}
               </h1>
             </div>
-            <div className="surface-panel p-8">{slides[slideIndex].body}</div>
+            <div className="surface-panel p-4 sm:p-8">{slides[slideIndex].body}</div>
           </div>
 
           <div className="flex items-center justify-between pt-4 border-t border-border max-w-3xl mx-auto w-full">

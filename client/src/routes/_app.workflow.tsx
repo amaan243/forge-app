@@ -242,7 +242,7 @@ function WorkflowOrchestrationPage() {
   return (
     <div className="flex flex-col min-h-[calc(100vh-3rem)] bg-background">
       {/* ─── Top Control Header ─── */}
-      <header className="border-b border-border bg-panel px-6 py-4">
+      <header className="border-b border-border bg-panel px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground uppercase tracking-wider">
@@ -400,9 +400,9 @@ function WorkflowOrchestrationPage() {
       </header>
 
       {/* ─── Main Content Tabs ─── */}
-      <div className="flex-1 p-6 space-y-6 max-w-7xl mx-auto w-full">
+      <div className="flex-1 p-4 sm:p-6 space-y-6 max-w-7xl mx-auto w-full">
         {/* Navigation Tabs */}
-        <div className="flex border-b border-border">
+        <div className="flex border-b border-border overflow-x-auto">
           <button
             onClick={() => setActiveTab("pipeline")}
             className={`px-4 py-2 text-xs font-mono border-b-2 font-medium transition-colors ${

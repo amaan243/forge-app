@@ -93,7 +93,7 @@ export function AuthLayout({ children, tagline }: { children: ReactNode; tagline
           © 2026 ArchForge Engineering
         </div>
       </aside>
-      <main className="flex flex-col items-center justify-center p-6 lg:p-12">
+      <main className="flex flex-col items-center justify-center p-4 sm:p-6 lg:p-12 min-w-0">
         <div className="lg:hidden mb-6"><AuthLogo /></div>
         <div className="w-full max-w-md">{children}</div>
       </main>
@@ -103,7 +103,7 @@ export function AuthLayout({ children, tagline }: { children: ReactNode; tagline
 
 export function AuthCard({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
-    <div className="surface-panel p-7 space-y-5">
+    <div className="surface-panel p-4 sm:p-7 space-y-5">
       <div className="space-y-1.5">
         <h2 className="text-xl font-display font-semibold tracking-tight">{title}</h2>
         {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}

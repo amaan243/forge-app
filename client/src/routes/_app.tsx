@@ -227,6 +227,17 @@ function AppShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    if (mobileNavOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileNavOpen]);
+
   const handleLogout = async () => {
     await logout();
     navigate({ to: "/login" });
@@ -425,12 +436,12 @@ function AppShell() {
             <Menu className="h-4 w-4" />
           </button>
 
-          <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground min-w-0 truncate">
+          <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground min-w-0 flex-1 sm:flex-initial">
             <span className="hidden sm:inline">archforge</span>
             {currentWorkspace && (
               <>
                 <ChevronRight className="h-3 w-3 shrink-0 hidden sm:inline" />
-                <span className="text-foreground shrink-0">{currentWorkspace.name}</span>
+                <span className="text-foreground shrink-0 truncate max-w-[100px] xs:max-w-[140px] sm:max-w-none">{currentWorkspace.name}</span>
                 <ChevronRight className="h-3 w-3 shrink-0" />
                 <ProjectSwitcher variant="header" />
               </>
@@ -442,7 +453,15 @@ function AppShell() {
               </span>
             ))}
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              className="md:hidden h-7 w-7 grid place-items-center rounded border border-border text-muted-foreground hover:text-foreground hover:bg-surface transition-colors"
+              aria-label="Open search palette"
+            >
+              <Search className="h-3.5 w-3.5" />
+            </button>
             <button
               onClick={() => setPaletteOpen(true)}
               className="hidden md:flex items-center gap-2 px-2 h-7 rounded border border-border bg-background text-xs text-muted-foreground font-mono w-64 hover:text-foreground hover:border-border/80 transition-colors"
@@ -452,13 +471,13 @@ function AppShell() {
               <kbd className="ml-auto px-1 py-px text-[10px] border border-border rounded bg-surface">⌘K</kbd>
             </button>
             <NotificationsButton open={notifOpen} onOpenChange={setNotifOpen} />
-            <div className="h-7 px-2 grid place-items-center rounded border border-border bg-surface text-[11px] font-mono text-muted-foreground">
+            <div className="h-7 px-2 hidden sm:grid place-items-center rounded border border-border bg-surface text-[11px] font-mono text-muted-foreground shrink-0">
               v0.2.0
             </div>
-            <div className="flex items-center gap-1.5 pl-2 border-l border-border">
+            <div className="flex items-center gap-1 sm:gap-1.5 pl-1.5 sm:pl-2 border-l border-border">
               <button
                 onClick={() => setUserOpen((v) => !v)}
-                className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-surface text-xs transition-colors"
+                className="flex items-center gap-1.5 px-1 sm:px-1.5 py-1 rounded hover:bg-surface text-xs transition-colors"
                 title="User profile & settings"
               >
                 <GeometricAvatar name={displayName} size={22} />
@@ -784,8 +803,8 @@ function StatusBar() {
   });
 
   return (
-    <div className="h-6 shrink-0 border-t border-border bg-panel/80 flex items-center gap-4 px-3 text-[10px] font-mono text-muted-foreground">
-      <span className="flex items-center gap-1.5" id="backend-health-indicator">
+    <div className="h-6 shrink-0 border-t border-border bg-panel/80 flex items-center gap-3 sm:gap-4 px-3 text-[10px] font-mono text-muted-foreground overflow-hidden">
+      <span className="flex items-center gap-1.5 shrink-0" id="backend-health-indicator">
         <span
           className={
             "h-1.5 w-1.5 rounded-full " +
@@ -794,12 +813,12 @@ function StatusBar() {
         />
         api: {health?.status === "ok" ? "connected" : isError ? "offline" : "connecting..."}
       </span>
-      <span>branch: main</span>
-      <span>latency: 42ms</span>
-      <span className="ml-auto">UTF-8</span>
-      <span>LF</span>
-      <span>TypeScript</span>
-      <span className="text-primary">⌘K</span>
+      <span className="hidden sm:inline shrink-0">branch: main</span>
+      <span className="hidden md:inline shrink-0">latency: 42ms</span>
+      <span className="ml-auto hidden sm:inline shrink-0">UTF-8</span>
+      <span className="hidden sm:inline shrink-0">LF</span>
+      <span className="hidden xs:inline shrink-0">TypeScript</span>
+      <span className="text-primary hidden xs:inline shrink-0">⌘K</span>
     </div>
   );
 }

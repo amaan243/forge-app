@@ -136,7 +136,7 @@ function VersionsPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div className="space-y-2">
           <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -150,13 +150,13 @@ function VersionsPage() {
             <ProjectSwitcher variant="inline" />
           </div>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap">
           <Button variant="outline" asChild><Link to="/compare"><GitCompare /> Compare two versions</Link></Button>
           <Button asChild><Link to="/workspace"><Plus /> New Version</Link></Button>
         </div>
       </header>
 
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
         <SummaryStat label="Total versions" value={loading ? "…" : String(totalVersions)} />
         <SummaryStat label="Published" value={loading ? "…" : String(publishedCount)} />
         <SummaryStat label="Latest" value={loading ? "…" : latestVersion ? `v${latestVersion.version_number}` : "—"} />

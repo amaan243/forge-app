@@ -59,7 +59,7 @@ function DesignSystem() {
   return (
     <div className="min-h-screen text-foreground">
       <TopBar />
-      <div className="mx-auto max-w-[1280px] px-8 py-10 space-y-12">
+      <div className="mx-auto max-w-[1280px] px-4 sm:px-8 py-6 sm:py-10 space-y-12">
         <Header />
         <Section id="01" title="Foundations" subtitle="Color, typography, spacing, radius">
           <Colors />

@@ -269,8 +269,8 @@ export function CommandPalette({
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-background/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative mx-auto mt-24 w-[92%] max-w-2xl surface-panel shadow-2xl overflow-hidden border border-border">
-        <div className="h-11 border-b border-border flex items-center gap-2 px-3">
+      <div className="relative mx-auto mt-6 sm:mt-24 w-[calc(100%-2rem)] max-w-2xl surface-panel shadow-2xl overflow-hidden border border-border rounded-lg max-h-[calc(100dvh-3rem)] flex flex-col">
+        <div className="h-11 border-b border-border flex items-center gap-2 px-3 shrink-0">
           {isSearching ? (
             <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
           ) : (
@@ -283,12 +283,18 @@ export function CommandPalette({
               setQ(e.target.value);
               setIdx(0);
             }}
-            placeholder="Search projects, architecture components, repositories, documentation…"
-            className="flex-1 bg-transparent border-0 outline-none text-sm font-mono placeholder:text-muted-foreground"
+            placeholder="Search projects, components, repos, docs…"
+            className="flex-1 bg-transparent border-0 outline-none text-xs sm:text-sm font-mono placeholder:text-muted-foreground"
           />
-          <kbd className="px-1.5 py-0.5 text-[10px] font-mono border border-border rounded bg-surface text-muted-foreground">esc</kbd>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-1.5 py-0.5 text-[10px] font-mono border border-border rounded bg-surface text-muted-foreground hover:text-foreground"
+          >
+            esc
+          </button>
         </div>
-        <div className="max-h-[420px] overflow-y-auto">
+        <div className="max-h-[min(420px,calc(100dvh-10rem))] overflow-y-auto flex-1">
           {flat.length === 0 && !isSearching && (
             <div className="p-8 text-center text-xs font-mono text-muted-foreground">
               No matching resources or commands found
@@ -309,7 +315,7 @@ export function CommandPalette({
                     onClick={() => executeCmd(c)}
                     onMouseEnter={() => setIdx(counter)}
                     className={
-                      "w-full flex items-center gap-2.5 h-10 px-3 text-left text-xs transition-colors " +
+                      "w-full flex items-center gap-2.5 min-h-10 py-2 px-3 text-left text-xs transition-colors " +
                       (active ? "bg-surface text-foreground" : "text-muted-foreground hover:bg-surface/60")
                     }
                   >
@@ -321,7 +327,7 @@ export function CommandPalette({
                       )}
                     </div>
                     {c.hint && (
-                      <span className="ml-auto font-mono text-[10px] text-muted-foreground">{c.hint}</span>
+                      <span className="ml-auto font-mono text-[10px] text-muted-foreground hidden sm:inline">{c.hint}</span>
                     )}
                     {active && <ArrowRight className="h-3 w-3 text-primary ml-1 shrink-0" />}
                   </button>
@@ -330,11 +336,11 @@ export function CommandPalette({
             </div>
           ))}
         </div>
-        <div className="h-8 border-t border-border px-3 flex items-center gap-3 text-[10px] font-mono text-muted-foreground">
-          <span><kbd className="px-1 border border-border rounded bg-surface">↑↓</kbd> navigate</span>
-          <span><kbd className="px-1 border border-border rounded bg-surface">↵</kbd> select</span>
-          <span><kbd className="px-1 border border-border rounded bg-surface">esc</kbd> close</span>
-          <span className="ml-auto">{flat.length} results</span>
+        <div className="h-8 border-t border-border px-3 flex items-center gap-3 text-[10px] font-mono text-muted-foreground shrink-0">
+          <span className="hidden sm:inline"><kbd className="px-1 border border-border rounded bg-surface">↑↓</kbd> navigate</span>
+          <span className="hidden sm:inline"><kbd className="px-1 border border-border rounded bg-surface">↵</kbd> select</span>
+          <span className="hidden sm:inline"><kbd className="px-1 border border-border rounded bg-surface">esc</kbd> close</span>
+          <span className="sm:ml-auto">{flat.length} results</span>
         </div>
       </div>
     </div>

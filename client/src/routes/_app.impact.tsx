@@ -588,7 +588,7 @@ ${plan.rollbackConsiderations.map((r) => `- ${r}`).join("\n")}
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Top Header */}
       <header className="flex items-end justify-between gap-4 flex-wrap border-b border-border pb-4">
         <div className="space-y-1.5">
@@ -681,7 +681,7 @@ ${plan.rollbackConsiderations.map((r) => `- ${r}`).join("\n")}
           <label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
             <GitBranch className="h-3 w-3 text-primary" /> Repository Code Evidence Snapshot
           </label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <select
               value={selectedRepoId}
               onChange={(e) => handleRepoChange(e.target.value)}

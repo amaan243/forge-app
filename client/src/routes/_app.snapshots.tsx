@@ -142,7 +142,7 @@ function SnapshotsPage() {
 
   if (!currentProject) {
     return (
-      <div className="p-6 lg:p-8 space-y-4">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-4">
         <h1 className="text-2xl font-display font-semibold tracking-tight">Project Snapshots</h1>
         <div className="surface-panel p-8 text-center space-y-3">
           <FolderOpen className="h-8 w-8 text-muted-foreground mx-auto" />
@@ -157,7 +157,7 @@ function SnapshotsPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div className="space-y-2">
           <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">

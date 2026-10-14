@@ -138,7 +138,7 @@ function TimelinePage() {
 
   if (!currentProject) {
     return (
-      <div className="p-6 lg:p-8 space-y-4">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-4">
         <h1 className="text-2xl font-display font-semibold tracking-tight">Engineering Timeline</h1>
         <div className="surface-panel p-8 text-center space-y-3">
           <FolderOpen className="h-8 w-8 text-muted-foreground mx-auto" />
@@ -153,7 +153,7 @@ function TimelinePage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div className="space-y-2">
           <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -168,7 +168,7 @@ function TimelinePage() {
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[240px]">
+        <div className="relative flex-1 min-w-0 sm:min-w-[240px] w-full sm:w-auto">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search project events…" className="pl-8 h-9 text-xs font-mono" />
         </div>

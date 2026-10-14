@@ -151,6 +151,7 @@ function WorkspacePage() {
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
   const [rightTab, setRightTab] = useState<"inspector" | "ai">("inspector");
   const [consoleLogs, setConsoleLogs] = useState<ConsoleLogItem[]>([]);
+  const [mobileTab, setMobileTab] = useState<"canvas" | "requirements" | "inspector" | "console">("canvas");
 
   // Log helper
   const addLog = useCallback((text: string, tone: "ok" | "warn" | "err" = "ok") => {
@@ -471,7 +472,131 @@ function WorkspacePage() {
         currentVersionNumber={currentVersion?.version_number}
         isPreview={Boolean(previewArchitecture)}
       />
-      <div className="flex-1 min-h-0">
+      {/* Mobile / Tablet Tabbed View (< lg) */}
+      <div className="flex-1 flex flex-col min-h-0 lg:hidden">
+        {/* Mobile Tab Strip */}
+        <div className="flex items-center justify-between border-b border-border bg-panel/90 px-2 py-1.5 shrink-0 overflow-x-auto text-xs font-mono">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setMobileTab("canvas")}
+              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors shrink-0 ${
+                mobileTab === "canvas"
+                  ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                  : "text-muted-foreground hover:text-foreground hover:bg-surface/60"
+              }`}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>Canvas ({canvasNodes.length})</span>
+            </button>
+            <button
+              onClick={() => setMobileTab("requirements")}
+              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors shrink-0 ${
+                mobileTab === "requirements"
+                  ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                  : "text-muted-foreground hover:text-foreground hover:bg-surface/60"
+              }`}
+            >
+              <FileCode2 className="h-3.5 w-3.5" />
+              <span>Specs ({requirements.length})</span>
+            </button>
+            <button
+              onClick={() => setMobileTab("inspector")}
+              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors shrink-0 ${
+                mobileTab === "inspector"
+                  ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                  : "text-muted-foreground hover:text-foreground hover:bg-surface/60"
+              }`}
+            >
+              <Activity className="h-3.5 w-3.5" />
+              <span>Inspector {selected ? "●" : ""}</span>
+            </button>
+            <button
+              onClick={() => setMobileTab("console")}
+              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors shrink-0 ${
+                mobileTab === "console"
+                  ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                  : "text-muted-foreground hover:text-foreground hover:bg-surface/60"
+              }`}
+            >
+              <Terminal className="h-3.5 w-3.5" />
+              <span>Console</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Active Tab Content */}
+        <div className="flex-1 min-h-0 overflow-hidden relative">
+          {mobileTab === "canvas" && (
+            <ArchitectureCanvas
+              canvasNodes={canvasNodes}
+              canvasEdges={canvasEdges}
+              currentVersion={currentVersion}
+              previewArchitecture={previewArchitecture}
+              requirementsCount={requirements.length}
+              loading={archLoading}
+              generating={generating}
+              saving={saving}
+              selected={selected}
+              selectedEdge={selectedEdge}
+              onSelect={(id) => {
+                setSelected(id);
+                setSelectedEdge(null);
+                setRightTab("inspector");
+              }}
+              onSelectEdge={(key) => {
+                setSelectedEdge(key);
+                setSelected(null);
+                setRightTab("inspector");
+              }}
+              onUpdateNodePos={handleUpdateNodePos}
+              onGenerate={handleGenerateArchitecture}
+              onSaveVersion={handleSaveVersion}
+              onDiscardPreview={handleDiscardPreview}
+              onReload={fetchArchitecture}
+            />
+          )}
+          {mobileTab === "requirements" && (
+            <RequirementEditor
+              requirements={requirements}
+              loading={reqsLoading}
+              onRefresh={fetchRequirements}
+              onRequirementChanged={fetchRequirements}
+            />
+          )}
+          {mobileTab === "inspector" && (
+            <RightPane
+              tab={rightTab}
+              onTab={setRightTab}
+              selected={selected}
+              selectedEdge={selectedEdge}
+              canvasNodes={canvasNodes}
+              canvasEdges={canvasEdges}
+              currentProject={currentProject}
+              currentVersion={currentVersion}
+              onClose={() => {
+                setSelected(null);
+                setSelectedEdge(null);
+              }}
+              onSelectNode={(nodeKey) => {
+                setSelected(nodeKey);
+                setSelectedEdge(null);
+                setRightTab("inspector");
+              }}
+              onReload={fetchArchitecture}
+            />
+          )}
+          {mobileTab === "console" && (
+            <GenerationConsole
+              logs={consoleLogs}
+              isGenerating={generating}
+              onClear={() => setConsoleLogs([])}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Desktop Multi-Panel Layout (>= lg) */}
+      <div className="hidden lg:flex flex-1 min-h-0">
         <ResizablePanelGroup orientation="vertical">
           <ResizablePanel defaultSize={72} minSize={40}>
             <ResizablePanelGroup orientation="horizontal">
@@ -977,6 +1102,96 @@ function ArchitectureCanvas({
     setDraggingNode(null);
   };
 
+  // Touch panning and pinch zoom support
+  const touchStartRef = useRef<{
+    x: number;
+    y: number;
+    panX: number;
+    panY: number;
+    dist: number;
+    zoom: number;
+    isPinching: boolean;
+  }>({ x: 0, y: 0, panX: 0, panY: 0, dist: 0, zoom: 1, isPinching: false });
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const target = e.target as HTMLElement;
+      if (target.closest(".canvas-node-card")) return;
+      setIsPanning(true);
+      touchStartRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        panX: pan.x,
+        panY: pan.y,
+        dist: 0,
+        zoom,
+        isPinching: false,
+      };
+    } else if (e.touches.length === 2) {
+      setIsPanning(false);
+      setDraggingNode(null);
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      touchStartRef.current = {
+        x: (t1.clientX + t2.clientX) / 2,
+        y: (t1.clientY + t2.clientY) / 2,
+        panX: pan.x,
+        panY: pan.y,
+        dist,
+        zoom,
+        isPinching: true,
+      };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 1 && !touchStartRef.current.isPinching) {
+      const touch = e.touches[0];
+      if (draggingNode) {
+        const newX = Math.round((touch.clientX - pan.x) / zoom - draggingNode.offsetX);
+        const newY = Math.round((touch.clientY - pan.y) / zoom - draggingNode.offsetY);
+        onUpdateNodePos(draggingNode.id, newX, newY);
+      } else if (isPanning) {
+        const dx = touch.clientX - touchStartRef.current.x;
+        const dy = touch.clientY - touchStartRef.current.y;
+        setPan({
+          x: touchStartRef.current.panX + dx,
+          y: touchStartRef.current.panY + dy,
+        });
+      }
+    } else if (e.touches.length === 2) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      const startDist = touchStartRef.current.dist || currentDist;
+      const scale = currentDist / startDist;
+      const newZoom = Math.min(2.0, Math.max(0.4, Number((touchStartRef.current.zoom * scale).toFixed(2))));
+      setZoom(newZoom);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsPanning(false);
+    setDraggingNode(null);
+    touchStartRef.current.isPinching = false;
+  };
+
+  const handleNodeTouchStart = (e: React.TouchEvent, node: CanvasNodeData) => {
+    if (e.touches.length !== 1) return;
+    e.stopPropagation();
+    onSelect(node.id);
+    const touch = e.touches[0];
+    const mouseCanvasX = (touch.clientX - pan.x) / zoom;
+    const mouseCanvasY = (touch.clientY - pan.y) / zoom;
+    setDraggingNode({
+      id: node.id,
+      offsetX: mouseCanvasX - node.x,
+      offsetY: mouseCanvasY - node.y,
+    });
+  };
+
   // Zoom via mouse wheel
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
@@ -1177,6 +1392,11 @@ function ArchitectureCanvas({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        style={{ touchAction: "none" }}
         className={
           "flex-1 min-h-0 relative overflow-hidden grid-bg bg-background select-none " +
           (isPanning ? "cursor-grabbing" : draggingNode ? "cursor-grabbing" : "cursor-grab")
@@ -1363,6 +1583,7 @@ function ArchitectureCanvas({
                   node={n}
                   selected={selected === n.id}
                   onMouseDown={(e) => handleNodeMouseDown(e, n)}
+                  onTouchStart={(e) => handleNodeTouchStart(e, n)}
                   onClick={() => onSelect(n.id)}
                 />
               ))}
@@ -1409,11 +1630,13 @@ function CanvasNode({
   node,
   selected,
   onMouseDown,
+  onTouchStart,
   onClick,
 }: {
   node: CanvasNodeData;
   selected: boolean;
   onMouseDown: (e: React.MouseEvent) => void;
+  onTouchStart?: (e: React.TouchEvent) => void;
   onClick: () => void;
 }) {
   const kindMap: Record<string, string> = {
@@ -1443,6 +1666,7 @@ function CanvasNode({
       }
       style={{ left: node.x, top: node.y }}
       onMouseDown={onMouseDown}
+      onTouchStart={onTouchStart}
       onClick={onClick}
     >
       {/* Visual Port Connection Handles on Node Borders */}

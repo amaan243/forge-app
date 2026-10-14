@@ -236,7 +236,7 @@ function DepsPage() {
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] min-h-[calc(100vh-3rem)]">
-      <div className="p-6 lg:p-8 space-y-4 border-r border-border min-w-0">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-4 border-r border-border min-w-0">
         <header className="flex items-end justify-between gap-4 flex-wrap">
           <div className="space-y-1">
             <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -248,7 +248,7 @@ function DepsPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <ProjectSwitcher variant="inline" />
             <select
               value={filterEcosystem}
@@ -284,8 +284,8 @@ function DepsPage() {
         )}
 
         {/* Graph Canvas */}
-        <div className="surface-panel p-4 overflow-auto">
-          <svg viewBox={`0 0 1100 ${svgHeight}`} className="w-full font-mono" style={{ minHeight: "450px" }}>
+        <div className="surface-panel p-2 sm:p-4 overflow-x-auto touch-pan-x">
+          <svg viewBox={`0 0 1100 ${svgHeight}`} className="w-full min-w-[700px] font-mono" style={{ minHeight: "420px" }}>
             <defs>
               <pattern id="grid-deps" width="24" height="24" patternUnits="userSpaceOnUse">
                 <path d="M 24 0 L 0 0 0 24" fill="none" stroke="currentColor" className="text-border" strokeWidth="0.5" />

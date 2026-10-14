@@ -299,7 +299,7 @@ function ArchitectureLibraryPage() {
   return (
     <div className="flex flex-col min-h-[calc(100vh-3rem)] bg-background">
       {/* ─── Header Banner ─── */}
-      <header className="border-b border-border bg-panel px-6 py-5">
+      <header className="border-b border-border bg-panel px-4 sm:px-6 py-4 sm:py-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground uppercase tracking-wider">
@@ -395,7 +395,7 @@ function ArchitectureLibraryPage() {
       </header>
 
       {/* ─── Search, Filters & Content ─── */}
-      <main className="flex-1 p-6 space-y-5 max-w-7xl w-full mx-auto">
+      <main className="flex-1 p-4 sm:p-6 space-y-5 max-w-7xl w-full mx-auto">
         {/* Filter Bar */}
         <div className="bg-panel border border-border rounded-lg p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-2.5">

@@ -235,9 +235,9 @@ function SettingsPage() {
   const isSaving = saveProfileMutation.isPending || saveSettingsMutation.isPending;
 
   return (
-    <div className="grid grid-cols-[240px_minmax(0,1fr)] min-h-[calc(100vh-3rem)]">
-      <aside className="border-r border-border p-3 space-y-0.5 bg-panel/40">
-        <div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Sections</div>
+    <div className="grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)] min-h-[calc(100vh-3rem)]">
+      <aside className="border-b md:border-b-0 md:border-r border-border p-2 md:p-3 flex md:flex-col gap-1 overflow-x-auto md:overflow-x-visible bg-panel/40 shrink-0 select-none">
+        <div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground hidden md:block">Sections</div>
         {GROUPS.map((g) => {
           const Icon = g.icon;
           const on = active === g.key;
@@ -249,18 +249,18 @@ function SettingsPage() {
                 setStatusMsg(null);
               }}
               className={
-                "w-full h-8 px-2 flex items-center gap-2 rounded text-xs text-left transition-colors " +
-                (on ? "bg-surface text-foreground border border-border" : "text-muted-foreground hover:text-foreground hover:bg-surface/60 border border-transparent")
+                "shrink-0 md:w-full h-8 px-2.5 md:px-2 flex items-center gap-2 rounded text-xs whitespace-nowrap text-left transition-colors " +
+                (on ? "bg-surface text-foreground border border-border font-medium shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-surface/60 border border-transparent")
               }
             >
-              <Icon className="h-3.5 w-3.5" /> {g.label}
+              <Icon className="h-3.5 w-3.5 shrink-0" /> <span>{g.label}</span>
             </button>
           );
         })}
       </aside>
 
-      <div className="p-8 max-w-2xl space-y-6">
-        <header className="space-y-2">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-2xl space-y-6 min-w-0">
+        <header className="space-y-1 sm:space-y-2">
           <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Settings</div>
           <h1 className="text-2xl font-display font-semibold tracking-tight">{group.label}</h1>
         </header>
@@ -593,12 +593,12 @@ function SettingsPage() {
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[180px_minmax(0,1fr)] items-start gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-[180px_minmax(0,1fr)] items-start gap-1.5 sm:gap-4">
       <div>
         <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">{label}</div>
-        {hint && <div className="text-[10px] text-muted-foreground mt-1">{hint}</div>}
+        {hint && <div className="text-[10px] text-muted-foreground mt-0.5 sm:mt-1">{hint}</div>}
       </div>
-      <div className="pt-0.5">{children}</div>
+      <div className="pt-0.5 min-w-0">{children}</div>
     </div>
   );
 }
@@ -741,12 +741,12 @@ function WorkspaceSection({
         </div>
 
         {/* Add Member Form */}
-        <div className="surface-panel p-3 flex items-center gap-2">
+        <div className="surface-panel p-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <Input
             value={newMemberUserId}
             onChange={(e) => setNewMemberUserId(e.target.value)}
             placeholder="User UUID (e.g. 00000000-0000-0000-0000-000000000000)"
-            className="text-xs font-mono flex-1"
+            className="text-xs font-mono flex-1 min-w-0"
           />
           <select
             value={newMemberRole}

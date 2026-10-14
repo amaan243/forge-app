@@ -1041,9 +1041,10 @@ export function Architecture3DScene() {
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0x060913, 0.024);
 
+    const isNarrow = width < 640;
     const camera = new THREE.PerspectiveCamera(46, width / height, 0.1, 100);
-    // Cinematic three-quarter camera framing the entire balanced solar system
-    const defaultCameraPos = new THREE.Vector3(0, 13.0, 21.0);
+    // Cinematic camera framing adapted for narrow mobile screens & wide desktop
+    const defaultCameraPos = new THREE.Vector3(0, isNarrow ? 18.0 : 13.0, isNarrow ? 32.0 : 21.0);
     const defaultLookAt = new THREE.Vector3(0, 0, 0);
     camera.position.copy(defaultCameraPos);
     camera.lookAt(defaultLookAt);
@@ -1062,7 +1063,7 @@ export function Architecture3DScene() {
     }
 
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, isNarrow ? 1.5 : 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.28;
     renderer.shadowMap.enabled = true;
@@ -1073,10 +1074,11 @@ export function Architecture3DScene() {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.maxDistance = 38;
+    controls.maxDistance = 42;
     controls.minDistance = 3.2;
     controls.maxPolarAngle = Math.PI / 2 + 0.15;
     controls.target.copy(defaultLookAt);
+    controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
     // 4. PHYSICALLY COHERENT CINEMATIC LIGHTING
     // Ambient Light: calibrated for realistic day/night terminator lines while revealing dark-side details
@@ -1630,8 +1632,52 @@ export function Architecture3DScene() {
       }
     };
 
+    // Touch tap selection support for mobile
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.changedTouches.length === 1) {
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        const dy = e.changedTouches[0].clientY - touchStartY;
+        const dt = Date.now() - touchStartTime;
+        if (Math.hypot(dx, dy) < 14 && dt < 450) {
+          const rect = container.getBoundingClientRect();
+          const tapMouse = new THREE.Vector2(
+            ((e.changedTouches[0].clientX - rect.left) / rect.width) * 2 - 1,
+            -((e.changedTouches[0].clientY - rect.top) / rect.height) * 2 + 1
+          );
+          raycaster.setFromCamera(tapMouse, camera);
+          const planetIntersects = raycaster.intersectObjects(planetsMasterGroup.children, true);
+          if (planetIntersects.length > 0) {
+            let parent = planetIntersects[0].object;
+            while (parent.parent && parent.parent !== planetsMasterGroup) {
+              parent = parent.parent;
+            }
+            const found = activePlanets.find((ap) => ap.group === parent);
+            if (found) {
+              setSelectedWorld(found.world);
+              sceneController.current?.focusPlanet(found.world);
+              return;
+            }
+          }
+        }
+      }
+    };
+
     container.addEventListener("mousemove", onPointerMove);
     container.addEventListener("click", onClick);
+    container.addEventListener("touchstart", onTouchStart, { passive: true });
+    container.addEventListener("touchend", onTouchEnd, { passive: true });
 
     // 10. Intersection Observer (freeze when offscreen)
     let isIntersecting = true;
@@ -1684,7 +1730,8 @@ export function Architecture3DScene() {
         isTransitioningCamera = true;
       },
       fitSolarSystem: () => {
-        targetCameraPos.set(0, 18.0, 28.0);
+        const isNarrow = (container?.clientWidth || 960) < 640;
+        targetCameraPos.set(0, isNarrow ? 24.0 : 18.0, isNarrow ? 38.0 : 28.0);
         targetLookAt.copy(defaultLookAt);
         isTransitioningCamera = true;
       },
@@ -1895,6 +1942,8 @@ export function Architecture3DScene() {
       window.removeEventListener("resize", onResize);
       container.removeEventListener("mousemove", onPointerMove);
       container.removeEventListener("click", onClick);
+      container.removeEventListener("touchstart", onTouchStart);
+      container.removeEventListener("touchend", onTouchEnd);
       document.body.style.cursor = "default";
 
       if (renderer.domElement && renderer.domElement.parentNode) {
@@ -1976,7 +2025,7 @@ export function Architecture3DScene() {
       </div>
 
       {/* ================= 3D VIEWPORT CANVAS ================= */}
-      <div className="relative w-full h-[500px] sm:h-[580px] lg:h-[640px] bg-gradient-to-b from-[#050811] via-[#090D18] to-[#0E1526] overflow-hidden">
+      <div className="relative w-full h-[380px] xs:h-[450px] sm:h-[540px] lg:h-[640px] bg-gradient-to-b from-[#050811] via-[#090D18] to-[#0E1526] overflow-hidden">
         {webglSupported === false ? (
           <SolarSystemFallbackVisual />
         ) : (
@@ -1985,36 +2034,36 @@ export function Architecture3DScene() {
 
         {/* Guided Tour Banner Overlay */}
         {isTourActive && (
-          <div className="absolute top-4 inset-x-4 sm:inset-x-12 z-30 surface-panel p-3.5 bg-panel/95 backdrop-blur-md border-primary/50 shadow-2xl flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-3">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center text-primary font-mono font-bold text-xs">
+          <div className="absolute top-3 inset-x-3 sm:top-4 sm:inset-x-12 z-30 surface-panel p-2.5 sm:p-3.5 bg-panel/95 backdrop-blur-md border-primary/50 shadow-2xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-3">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center text-primary font-mono font-bold text-xs shrink-0">
                 {tourIndex + 1}/{TOUR_PLANETS.length}
               </div>
-              <div>
-                <div className="text-xs font-mono uppercase text-primary font-semibold">Guided Solar System Tour</div>
-                <div className="text-sm font-semibold text-foreground">
-                  Inspecting World: {selectedWorld?.name || "Architecture Core"}
+              <div className="min-w-0">
+                <div className="text-[10px] font-mono uppercase text-primary font-semibold truncate">Guided Tour</div>
+                <div className="text-xs sm:text-sm font-semibold text-foreground truncate">
+                  {selectedWorld?.name || "Architecture Core"}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <button
                 onClick={prevTour}
                 disabled={tourIndex === 0}
-                className="px-2.5 py-1 rounded bg-surface border border-border text-xs font-mono text-muted-foreground hover:text-foreground disabled:opacity-40"
+                className="px-2 py-1 rounded bg-surface border border-border text-xs font-mono text-muted-foreground hover:text-foreground disabled:opacity-40"
               >
                 Prev
               </button>
               <button
                 onClick={nextTour}
-                className="px-3 py-1 rounded bg-primary text-primary-foreground text-xs font-mono font-semibold hover:bg-primary/90 flex items-center gap-1"
+                className="px-2.5 py-1 rounded bg-primary text-primary-foreground text-xs font-mono font-semibold hover:bg-primary/90 flex items-center gap-1"
               >
                 {tourIndex === TOUR_PLANETS.length - 1 ? "Finish" : "Next"} <ArrowRight className="h-3 w-3" />
               </button>
               <button
                 onClick={endTour}
-                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface ml-1"
+                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface ml-0.5"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -2023,28 +2072,28 @@ export function Architecture3DScene() {
         )}
 
         {/* Top-Right On-Canvas Viewport Controls */}
-        <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+        <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 flex items-center gap-1.5 sm:gap-2">
           {!isTourActive && (
             <button
               onClick={startTour}
-              className="px-3 py-1.5 rounded-lg border border-primary/40 bg-panel/85 backdrop-blur-sm text-xs font-mono font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-all shadow-md flex items-center gap-1.5"
+              className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg border border-primary/40 bg-panel/85 backdrop-blur-sm text-xs font-mono font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-all shadow-md flex items-center gap-1.5"
             >
               <Compass className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Guided Tour</span>
             </button>
           )}
 
-          <div className="flex items-center gap-1 p-1 rounded-lg border border-border bg-panel/80 backdrop-blur-sm shadow-md">
+          <div className="flex items-center gap-0.5 sm:gap-1 p-1 rounded-lg border border-border bg-panel/80 backdrop-blur-sm shadow-md">
             <button
               onClick={() => sceneController.current?.resetView()}
-              className="p-1.5 rounded hover:bg-surface text-muted-foreground hover:text-foreground transition-colors"
+              className="p-1 sm:p-1.5 rounded hover:bg-surface text-muted-foreground hover:text-foreground transition-colors"
               title="Reset Solar System View"
             >
               <RotateCcw className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={() => sceneController.current?.fitSolarSystem()}
-              className="p-1.5 rounded hover:bg-surface text-muted-foreground hover:text-foreground transition-colors"
+              className="p-1 sm:p-1.5 rounded hover:bg-surface text-muted-foreground hover:text-foreground transition-colors"
               title="Fit Entire Solar System"
             >
               <Maximize2 className="h-3.5 w-3.5" />
@@ -2054,7 +2103,7 @@ export function Architecture3DScene() {
                 setIsOrbitPaused(!isOrbitPaused);
                 sceneController.current?.toggleOrbit();
               }}
-              className="p-1.5 rounded hover:bg-surface text-muted-foreground hover:text-foreground transition-colors"
+              className="p-1 sm:p-1.5 rounded hover:bg-surface text-muted-foreground hover:text-foreground transition-colors"
               title={isOrbitPaused ? "Resume Orbit Motion" : "Pause Orbit Motion"}
             >
               {isOrbitPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
@@ -2064,7 +2113,7 @@ export function Architecture3DScene() {
 
         {/* Contextual Planet Telemetry Inspector */}
         {(selectedWorld || hoveredWorld) && (
-          <div className="absolute bottom-4 left-4 z-20 surface-panel p-4 bg-panel/95 backdrop-blur-md border-primary/40 shadow-2xl max-w-[340px] animate-in fade-in zoom-in-95 duration-150">
+          <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:left-4 sm:bottom-4 z-20 surface-panel p-3.5 sm:p-4 bg-panel/95 backdrop-blur-md border-primary/40 shadow-2xl w-auto sm:max-w-[340px] max-h-[50vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
             {(() => {
               const active = selectedWorld || hoveredWorld!;
               return (

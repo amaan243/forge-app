@@ -104,7 +104,7 @@ function AnalyticsPage() {
   const complexity = metrics?.architectureComplexity ?? (insights?.architectureComplexity ?? null);
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div className="space-y-2">
           <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
@@ -156,7 +156,7 @@ function AnalyticsPage() {
       ) : (
         <>
           {/* Key Objective Metrics Cards */}
-          <div className="grid md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="surface-panel p-3.5 space-y-2">
               <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center justify-between">
                 <span className="flex items-center gap-2">

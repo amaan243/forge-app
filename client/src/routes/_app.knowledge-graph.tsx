@@ -517,6 +517,74 @@ function KnowledgeGraphPage() {
     setDragStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
   };
 
+  // Touch panning and pinch zoom support
+  const touchStartRef = useRef<{
+    x: number;
+    y: number;
+    panX: number;
+    panY: number;
+    dist: number;
+    zoom: number;
+    isPinching: boolean;
+  }>({ x: 0, y: 0, panX: 0, panY: 0, dist: 0, zoom: 1, isPinching: false });
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest("button") || target.closest("select") || target.closest("input")) return;
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      touchStartRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        panX: panOffset.x,
+        panY: panOffset.y,
+        dist: 0,
+        zoom: zoomLevel,
+        isPinching: false,
+      };
+      setIsDragging(true);
+    } else if (e.touches.length === 2) {
+      setIsDragging(false);
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      touchStartRef.current = {
+        x: (t1.clientX + t2.clientX) / 2,
+        y: (t1.clientY + t2.clientY) / 2,
+        panX: panOffset.x,
+        panY: panOffset.y,
+        dist,
+        zoom: zoomLevel,
+        isPinching: true,
+      };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 1 && !touchStartRef.current.isPinching) {
+      const touch = e.touches[0];
+      const dx = touch.clientX - touchStartRef.current.x;
+      const dy = touch.clientY - touchStartRef.current.y;
+      setPanOffset({
+        x: touchStartRef.current.panX + dx,
+        y: touchStartRef.current.panY + dy,
+      });
+    } else if (e.touches.length === 2) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      const startDist = touchStartRef.current.dist || currentDist;
+      const scale = currentDist / startDist;
+      const newZoom = Math.max(0.2, Math.min(3.5, Number((touchStartRef.current.zoom * scale).toFixed(2))));
+      setZoomLevel(newZoom);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    touchStartRef.current.isPinching = false;
+  };
+
   const handleZoom = (delta: number) => {
     setZoomLevel((prev) => Math.max(0.2, Math.min(3.5, Number((prev + delta).toFixed(2)))));
   };
@@ -941,6 +1009,11 @@ function KnowledgeGraphPage() {
             ref={containerRef}
             className="flex-1 relative overflow-hidden bg-background select-none cursor-grab active:cursor-grabbing h-[calc(100vh-14rem)]"
             onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
+            style={{ touchAction: "none" }}
             onDoubleClick={handleResetView}
           >
             {/* Canvas Floating Controls */}
@@ -1541,7 +1614,7 @@ function KnowledgeGraphPage() {
 
         {/* ─── Evidence Inspector Sidebar ─── */}
         {selectedEntity && (
-          <aside className="w-96 flex-none border-l border-border bg-panel p-5 overflow-y-auto flex flex-col justify-between shadow-2xl">
+          <aside className="w-full md:w-96 fixed md:static inset-y-0 right-0 z-40 md:z-auto flex-none border-l border-border bg-panel p-4 sm:p-5 overflow-y-auto flex flex-col justify-between shadow-2xl">
             <div className="space-y-5">
               {/* Header */}
               <div className="flex items-start justify-between gap-3 border-b border-border pb-4">

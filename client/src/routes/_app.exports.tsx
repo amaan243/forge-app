@@ -259,7 +259,7 @@ function ExportsPage() {
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div className="space-y-2">
           <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
@@ -362,14 +362,15 @@ function ExportsPage() {
               )}
             </div>
 
-            <div className="surface-panel overflow-hidden">
-              <div className="grid grid-cols-[minmax(0,1fr)_100px_110px_130px_90px] items-center gap-3 h-9 px-3 border-b border-border text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                <span>Name / Type</span>
-                <span>Size</span>
-                <span>When</span>
-                <span>Status</span>
-                <span className="text-right">Action</span>
-              </div>
+            <div className="surface-panel overflow-x-auto">
+              <div className="min-w-[560px]">
+                <div className="grid grid-cols-[minmax(0,1fr)_100px_110px_130px_90px] items-center gap-3 h-9 px-3 border-b border-border text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                  <span>Name / Type</span>
+                  <span>Size</span>
+                  <span>When</span>
+                  <span>Status</span>
+                  <span className="text-right">Action</span>
+                </div>
 
               {loadingHistory ? (
                 <div className="p-8 flex items-center justify-center gap-2 text-xs font-mono text-muted-foreground">
@@ -463,6 +464,7 @@ function ExportsPage() {
                   })}
                 </div>
               )}
+              </div>
             </div>
           </section>
         </>

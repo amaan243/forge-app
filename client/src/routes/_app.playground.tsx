@@ -658,7 +658,7 @@ function PlaygroundPage() {
   const proposedEdges = (currentSimulation?.after_architecture?.edges as ArchitectureEdge[]) || baselineGraph?.edges || [];
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Top Header */}
       <header className="flex items-end justify-between gap-4 flex-wrap border-b border-border pb-4">
         <div className="space-y-1.5">

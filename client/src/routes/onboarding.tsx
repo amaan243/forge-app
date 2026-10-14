@@ -28,10 +28,10 @@ function OnboardingPage() {
       <AuthCard title="Set up your workspace" subtitle="Three quick steps and you're inside.">
         <div className="flex items-center gap-2">
           {STEPS.map((s, i) => (
-            <div key={s} className="flex items-center gap-2 flex-1">
+            <div key={s} className="flex items-center gap-1.5 sm:gap-2 flex-1">
               <div
                 className={
-                  "h-6 w-6 grid place-items-center rounded-full border text-[10px] font-mono " +
+                  "h-6 w-6 shrink-0 grid place-items-center rounded-full border text-[10px] font-mono " +
                   (i < step
                     ? "bg-primary/20 border-primary/50 text-primary"
                     : i === step
@@ -42,7 +42,7 @@ function OnboardingPage() {
                 {i < step ? <Check className="h-3 w-3" /> : i + 1}
               </div>
               <div className="min-w-0 flex-1">
-                <div className={"text-[11px] font-mono truncate " + (i === step ? "text-foreground" : "text-muted-foreground")}>{s}</div>
+                <div className={"text-[11px] font-mono truncate hidden sm:block " + (i === step ? "text-foreground" : "text-muted-foreground")}>{s}</div>
               </div>
               {i < STEPS.length - 1 && <div className="h-px flex-1 bg-border" />}
             </div>
@@ -58,7 +58,7 @@ function OnboardingPage() {
         {step === 1 && (
           <div className="space-y-3">
             <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Pick your primary stack</div>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {STACKS.map((s) => {
                 const on = picks.includes(s);
                 return (
@@ -84,7 +84,7 @@ function OnboardingPage() {
         )}
         {step === 2 && (
           <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {["GitHub", "GitLab", "Bitbucket"].map((p) => (
                 <button
                   key={p}

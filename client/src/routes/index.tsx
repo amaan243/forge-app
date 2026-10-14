@@ -341,11 +341,11 @@ export function LandingPage() {
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col items-center text-center space-y-6 max-w-4xl mx-auto">
               {/* Technical Status Pill */}
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/80 bg-surface/70 text-xs font-mono backdrop-blur-sm shadow-xs">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                <span className="text-muted-foreground">ArchForge Platform</span>
-                <span className="text-muted-foreground/60">·</span>
-                <span className="text-foreground font-semibold">From Requirements to Production Architecture</span>
+              <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-3 py-1 rounded-full border border-border/80 bg-surface/70 text-xs font-mono backdrop-blur-sm shadow-xs">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse shrink-0" />
+                <span className="text-muted-foreground shrink-0">ArchForge Platform</span>
+                <span className="text-muted-foreground/60 hidden xs:inline">·</span>
+                <span className="text-foreground font-semibold truncate max-w-[200px] xs:max-w-none">From Requirements to Production Architecture</span>
               </div>
 
               {/* Headline */}

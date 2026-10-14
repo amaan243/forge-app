@@ -402,7 +402,7 @@ function DocumentationPage() {
       {/* Main 3-column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_240px] flex-1">
         {/* Left Sidebar: Document List & Search */}
-        <aside className="border-r border-border bg-panel/40 flex flex-col min-h-0">
+        <aside className="border-b lg:border-b-0 lg:border-r border-border bg-panel/40 flex flex-col min-h-0 max-h-60 lg:max-h-none overflow-y-auto">
           <div className="p-3 border-b border-border space-y-2">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -532,7 +532,7 @@ function DocumentationPage() {
           {activeDoc ? (
             <>
               {/* Document Header Controls */}
-              <div className="h-12 border-b border-border px-6 flex items-center justify-between gap-4 bg-panel/30">
+              <div className="min-h-12 border-b border-border px-4 sm:px-6 py-2 flex items-center justify-between gap-2 sm:gap-4 bg-panel/30 flex-wrap">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground px-1.5 py-0.5 rounded bg-surface border border-border">
                     {activeDoc.format}

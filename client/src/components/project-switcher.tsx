@@ -79,7 +79,7 @@ export function ProjectSwitcher({ variant = "header", className = "" }: ProjectS
       return (
         <button
           onClick={handleToggle}
-          className={`flex items-center gap-1.5 h-7 px-2 rounded border border-border/80 bg-surface/70 hover:bg-surface hover:border-border text-xs font-mono transition-colors max-w-[220px] ${className}`}
+          className={`flex items-center gap-1.5 h-7 px-2 rounded border border-border/80 bg-surface/70 hover:bg-surface hover:border-border text-xs font-mono transition-colors max-w-[110px] xs:max-w-[150px] sm:max-w-[200px] md:max-w-[240px] ${className}`}
           title={currentProject ? `Active Project: ${currentProject.name}` : "Select active project"}
           aria-expanded={open}
         >
@@ -96,12 +96,12 @@ export function ProjectSwitcher({ variant = "header", className = "" }: ProjectS
       return (
         <button
           onClick={handleToggle}
-          className={`flex items-center gap-1.5 h-6 px-2 rounded border border-border/90 bg-panel hover:bg-surface text-xs font-mono transition-colors group ${className}`}
+          className={`flex items-center gap-1.5 h-6 px-2 rounded border border-border/90 bg-panel hover:bg-surface text-xs font-mono transition-colors group max-w-full ${className}`}
           title="Switch Active Project"
           aria-expanded={open}
         >
-          <span className="text-muted-foreground group-hover:text-foreground transition-colors">Project:</span>
-          <span className="font-semibold text-foreground truncate max-w-[140px]">
+          <span className="text-muted-foreground group-hover:text-foreground transition-colors hidden sm:inline">Project:</span>
+          <span className="font-semibold text-foreground truncate max-w-[100px] sm:max-w-[140px]">
             {currentProject ? currentProject.name : "Unassigned"}
           </span>
           <ChevronDown className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
@@ -113,24 +113,24 @@ export function ProjectSwitcher({ variant = "header", className = "" }: ProjectS
       return (
         <button
           onClick={handleToggle}
-          className={`h-7 px-2 flex items-center gap-1.5 rounded border border-border bg-surface text-xs font-mono text-muted-foreground hover:text-foreground transition-colors ${className}`}
+          className={`h-7 px-2 flex items-center gap-1.5 rounded border border-border bg-surface text-xs font-mono text-muted-foreground hover:text-foreground transition-colors max-w-full ${className}`}
           title="Switch Project"
           aria-expanded={open}
         >
-          <FolderGit2 className="h-3 w-3 text-primary" />
-          <span className="truncate max-w-[120px]">{currentProject ? currentProject.name : "Projects"}</span>
-          <ChevronDown className="h-2.5 w-2.5 text-muted-foreground" />
+          <FolderGit2 className="h-3 w-3 text-primary shrink-0" />
+          <span className="truncate max-w-[90px] sm:max-w-[120px]">{currentProject ? currentProject.name : "Projects"}</span>
+          <ChevronDown className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
         </button>
       );
     }
 
     // Default "inline"
     return (
-      <div className={`flex items-center gap-1.5 ${className}`}>
-        <span className="text-[10px] font-mono uppercase text-muted-foreground">Project:</span>
+      <div className={`flex items-center gap-1.5 max-w-full ${className}`}>
+        <span className="text-[10px] font-mono uppercase text-muted-foreground hidden sm:inline">Project:</span>
         <button
           onClick={handleToggle}
-          className="flex items-center gap-1.5 h-8 px-2.5 rounded border border-border bg-background hover:bg-surface text-xs font-mono transition-colors min-w-[160px] justify-between"
+          className="flex items-center gap-1.5 h-8 px-2.5 rounded border border-border bg-background hover:bg-surface text-xs font-mono transition-colors min-w-[120px] sm:min-w-[160px] max-w-[220px] justify-between"
           title="Switch Project"
           aria-expanded={open}
         >
@@ -148,7 +148,7 @@ export function ProjectSwitcher({ variant = "header", className = "" }: ProjectS
       {renderTrigger()}
 
       {open && (
-        <div className={`absolute ${variant === "toolbar" ? "right-0" : "left-0"} mt-1 w-72 surface-panel shadow-2xl z-50 overflow-hidden divide-y divide-border border border-border rounded-md animate-in fade-in-50 zoom-in-95 duration-100`}>
+        <div className={`absolute ${variant === "toolbar" ? "right-0" : "left-0"} mt-1 w-72 max-w-[calc(100vw-1.5rem)] surface-panel shadow-2xl z-50 overflow-hidden divide-y divide-border border border-border rounded-md animate-in fade-in-50 zoom-in-95 duration-100`}>
           {/* Header Info */}
           <div className="px-3 py-2 bg-panel/50">
             <div className="flex items-center justify-between">
