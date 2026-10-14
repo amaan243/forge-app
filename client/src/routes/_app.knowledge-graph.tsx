@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useDeferredValue } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -176,6 +176,7 @@ function KnowledgeGraphPage() {
   const [selectedAnalysisId, setSelectedAnalysisId] = useState<string>("");
   const [graphScope, setGraphScope] = useState<KnowledgeGraphScope>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [selectedTypes, setSelectedTypes] = useState<KnowledgeGraphEntityType[]>([]);
   const [viewMode, setViewMode] = useState<"graph" | "traceability" | "table">("graph");
 
@@ -238,7 +239,7 @@ function KnowledgeGraphPage() {
       selectedAnalysisId,
       graphScope,
       selectedTypes,
-      searchQuery,
+      deferredSearchQuery,
     ],
     queryFn: () =>
       getKnowledgeGraph(currentProject!.id, {
@@ -247,7 +248,7 @@ function KnowledgeGraphPage() {
         repositoryAnalysisId: selectedAnalysisId || undefined,
         scope: graphScope,
         entityTypes: selectedTypes.length > 0 ? selectedTypes : undefined,
-        search: searchQuery || undefined,
+        search: deferredSearchQuery || undefined,
         limit: 200,
       }),
     enabled: Boolean(currentProject?.id),

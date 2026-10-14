@@ -26,7 +26,7 @@ import {
   Globe,
   Lock,
 } from "lucide-react";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useDeferredValue } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -106,6 +106,7 @@ function RepositoryPage() {
 
   // Route search & filters
   const [routeQuery, setRouteQuery] = useState("");
+  const deferredRouteQuery = useDeferredValue(routeQuery);
   const [methodFilter, setMethodFilter] = useState<"ALL" | "GET" | "POST" | "PUT" | "DELETE">("ALL");
 
   // Form states for repository connection
@@ -372,8 +373,8 @@ function RepositoryPage() {
   const filteredRoutes = useMemo(() => {
     return routesList.filter((r) => {
       if (methodFilter !== "ALL" && r.method !== methodFilter) return false;
-      if (!routeQuery.trim()) return true;
-      const q = routeQuery.toLowerCase();
+      if (!deferredRouteQuery.trim()) return true;
+      const q = deferredRouteQuery.toLowerCase();
       return (
         r.path.toLowerCase().includes(q) ||
         r.file.toLowerCase().includes(q) ||
@@ -381,7 +382,7 @@ function RepositoryPage() {
         r.method.toLowerCase().includes(q)
       );
     });
-  }, [routesList, methodFilter, routeQuery]);
+  }, [routesList, methodFilter, deferredRouteQuery]);
 
   if (!currentProject) {
     return (

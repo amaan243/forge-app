@@ -37,8 +37,53 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
 import { LandingHeader } from "@/components/landing/landing-header";
 import { LandingFooter } from "@/components/landing/landing-footer";
-import { Architecture3DScene } from "@/components/landing/3d-architecture-scene";
-import { InteractiveArchitectureDemo } from "@/components/landing/interactive-demo";
+import React, { lazy, Suspense } from "react";
+
+const Architecture3DScene = lazy(() =>
+  import("@/components/landing/3d-architecture-scene").then((m) => ({
+    default: m.Architecture3DScene,
+  }))
+);
+
+const InteractiveArchitectureDemo = lazy(() =>
+  import("@/components/landing/interactive-demo").then((m) => ({
+    default: m.InteractiveArchitectureDemo,
+  }))
+);
+
+function Architecture3DSceneSkeleton() {
+  return (
+    <div className="relative w-full rounded-2xl border border-border/80 bg-panel/85 backdrop-blur-xl overflow-hidden shadow-2xl flex flex-col">
+      <div className="px-4 py-3 border-b border-border bg-[#0B1120]/95 flex items-center justify-between text-xs font-mono text-muted-foreground select-none">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+          <span className="text-foreground font-semibold">Stage 1: Software Architecture Core</span>
+        </div>
+        <span className="text-[11px] text-muted-foreground">Initializing 3D Keplerian Simulation…</span>
+      </div>
+      <div className="relative w-full h-[380px] xs:h-[450px] sm:h-[540px] lg:h-[640px] bg-gradient-to-b from-[#050811] via-[#090D18] to-[#0E1526] flex flex-col items-center justify-center p-6 text-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+          <div className="text-xs font-mono text-foreground font-medium">Assembling Engineering Planetary System</div>
+          <div className="text-[11px] font-mono text-muted-foreground max-w-xs">Loading WebGL shaders, orbital ephemerides, and telemetry conduits…</div>
+        </div>
+      </div>
+      <div className="p-4 border-t border-border bg-surface/30 flex items-center justify-between text-xs font-mono text-muted-foreground">
+        <span>Deterministic Layout</span>
+        <span>Three.js Engine</span>
+      </div>
+    </div>
+  );
+}
+
+function InteractiveDemoSkeleton() {
+  return (
+    <div className="surface-panel p-8 rounded-xl border border-border/80 bg-panel/70 flex flex-col items-center justify-center text-center min-h-[380px] space-y-3">
+      <div className="h-8 w-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+      <div className="text-xs font-mono text-muted-foreground">Loading interactive architecture intelligence demo…</div>
+    </div>
+  );
+}
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -415,7 +460,9 @@ export function LandingPage() {
 
             {/* Cinematic Interactive 3D Architecture Experience Centerpiece */}
             <div className="mt-12 sm:mt-16 max-w-6xl mx-auto w-full">
-              <Architecture3DScene />
+              <Suspense fallback={<Architecture3DSceneSkeleton />}>
+                <Architecture3DScene />
+              </Suspense>
               <div className="mt-3 flex flex-col sm:flex-row items-center justify-between text-[11px] font-mono text-muted-foreground/80 px-2 gap-2">
                 <span className="flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" />
@@ -667,7 +714,9 @@ export function LandingPage() {
             </div>
 
             {/* Sandbox Component */}
-            <InteractiveArchitectureDemo />
+            <Suspense fallback={<InteractiveDemoSkeleton />}>
+              <InteractiveArchitectureDemo />
+            </Suspense>
           </div>
         </section>
 

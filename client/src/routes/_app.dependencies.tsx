@@ -151,12 +151,12 @@ function DepsPage() {
     return result;
   }, [data, filterEcosystem, filterType]);
 
-  const activeNodeIds = useMemo(() => new Set(visualNodes.map((n) => n.id)), [visualNodes]);
+  const visualNodeMap = useMemo(() => new Map(visualNodes.map((n) => [n.id, n])), [visualNodes]);
 
   const visualEdges = useMemo(() => {
     if (!data) return [];
-    return data.edges.filter((e) => activeNodeIds.has(e.source) && activeNodeIds.has(e.target));
-  }, [data, activeNodeIds]);
+    return data.edges.filter((e) => visualNodeMap.has(e.source) && visualNodeMap.has(e.target));
+  }, [data, visualNodeMap]);
 
   const selected = useMemo(() => {
     return visualNodes.find((n) => n.id === selectedId) || visualNodes[0] || null;
@@ -298,8 +298,8 @@ function DepsPage() {
 
             {/* Edges */}
             {visualEdges.map((e, i) => {
-              const na = visualNodes.find((n) => n.id === e.source);
-              const nb = visualNodes.find((n) => n.id === e.target);
+              const na = visualNodeMap.get(e.source);
+              const nb = visualNodeMap.get(e.target);
               if (!na || !nb) return null;
               const active = selected && (e.source === selected.id || e.target === selected.id);
 

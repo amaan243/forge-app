@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useDeferredValue } from "react";
 import {
   Network,
   Boxes,
@@ -114,6 +114,7 @@ function ArchitectureLibraryPage() {
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "published" | "draft">("all");
   const [sortBy, setSortBy] = useState<"latest" | "version" | "components">("latest");
@@ -270,8 +271,8 @@ function ArchitectureLibraryPage() {
           return false;
         }
         // Search query
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
+        if (deferredSearchQuery.trim()) {
+          const q = deferredSearchQuery.toLowerCase();
           const matchName = item.name.toLowerCase().includes(q);
           const matchProject = item.projectName.toLowerCase().includes(q);
           const matchVersion = `v${item.version_number}`.toLowerCase().includes(q);
@@ -294,7 +295,7 @@ function ArchitectureLibraryPage() {
         }
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
-  }, [architectures, selectedProjectId, statusFilter, searchQuery, sortBy]);
+  }, [architectures, selectedProjectId, statusFilter, deferredSearchQuery, sortBy]);
 
   return (
     <div className="flex flex-col min-h-[calc(100vh-3rem)] bg-background">

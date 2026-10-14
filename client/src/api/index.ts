@@ -1,4 +1,4 @@
-export { default as apiClient } from "./client";
+export { default as apiClient, invalidateApiCache } from "./client";
 export { getHealth, type HealthResponse } from "./health";
 export {
   authApi,

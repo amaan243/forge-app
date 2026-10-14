@@ -27,8 +27,32 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// In-flight GET request deduplication and short-lived read cache
+const inFlightRequests = new Map<string, Promise<any>>();
+const queryCache = new Map<string, { res: any; time: number }>();
+const CACHE_TTL_MS = 2500; // 2.5 seconds: eliminates duplicate requests during mounting and quick tab switches without serving stale data
+
+export function invalidateApiCache(pattern?: string) {
+  if (!pattern) {
+    queryCache.clear();
+  } else {
+    for (const key of queryCache.keys()) {
+      if (key.includes(pattern)) {
+        queryCache.delete(key);
+      }
+    }
+  }
+}
+
+// Invalidate cache immediately on any mutation (POST, PUT, PATCH, DELETE)
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const method = response.config?.method?.toLowerCase();
+    if (method && method !== "get") {
+      queryCache.clear();
+    }
+    return response;
+  },
   (error) => {
     let message = "An unexpected error occurred.";
 
@@ -55,5 +79,45 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Intercept apiClient.get to deduplicate in-flight requests and reuse warm reads
+const originalGet = apiClient.get.bind(apiClient);
+apiClient.get = function <T = any, R = any, D = any>(url: string, config?: any): Promise<R> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("archforge_token") || "" : "";
+  const paramStr = config?.params ? JSON.stringify(config.params) : "";
+  const cacheKey = `${url}::${paramStr}::${token}`;
+
+  const bypassCache = config?.headers?.["x-skip-cache"] || config?.cache === false;
+
+  if (!bypassCache) {
+    const cached = queryCache.get(cacheKey);
+    if (cached && Date.now() - cached.time < CACHE_TTL_MS) {
+      return Promise.resolve(cached.res as R);
+    }
+
+    if (inFlightRequests.has(cacheKey)) {
+      return inFlightRequests.get(cacheKey)! as Promise<R>;
+    }
+  }
+
+  const promise = originalGet<T, R, D>(url, config)
+    .then((res: any) => {
+      inFlightRequests.delete(cacheKey);
+      if (!bypassCache && res.status >= 200 && res.status < 300) {
+        queryCache.set(cacheKey, { res, time: Date.now() });
+      }
+      return res;
+    })
+    .catch((err: any) => {
+      inFlightRequests.delete(cacheKey);
+      throw err;
+    });
+
+  if (!bypassCache) {
+    inFlightRequests.set(cacheKey, promise);
+  }
+
+  return promise;
+};
 
 export default apiClient;

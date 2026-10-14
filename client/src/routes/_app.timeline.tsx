@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useDeferredValue } from "react";
 import {
   Activity,
   Search,
@@ -90,6 +90,7 @@ function TimelinePage() {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState("");
+  const deferredQ = useDeferredValue(q);
   const [filter, setFilter] = useState<string>("all");
 
   useEffect(() => {
@@ -125,16 +126,18 @@ function TimelinePage() {
     return events.map(formatEventKind);
   }, [events]);
 
-  const filtered = formattedEvents.filter(
-    (e) =>
-      (filter === "all" || e.kind === filter) &&
-      (q === "" || (e.title + e.meta).toLowerCase().includes(q.toLowerCase()))
-  );
+  const grouped = useMemo(() => {
+    const filtered = formattedEvents.filter(
+      (e) =>
+        (filter === "all" || e.kind === filter) &&
+        (deferredQ === "" || (e.title + e.meta).toLowerCase().includes(deferredQ.toLowerCase()))
+    );
 
-  const grouped = filtered.reduce<Record<string, typeof formattedEvents>>((acc, e) => {
-    (acc[e.day] ||= []).push(e);
-    return acc;
-  }, {});
+    return filtered.reduce<Record<string, typeof formattedEvents>>((acc, e) => {
+      (acc[e.day] ||= []).push(e);
+      return acc;
+    }, {});
+  }, [formattedEvents, filter, deferredQ]);
 
   if (!currentProject) {
     return (

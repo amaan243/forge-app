@@ -11,6 +11,7 @@ import {
   createProject as apiCreateProject,
   updateProject as apiUpdateProject,
   deleteProject as apiDeleteProject,
+  invalidateApiCache,
 } from "@/api";
 import { useAuth } from "./auth-context";
 import { toast } from "sonner";
@@ -133,6 +134,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   // Select workspace
   const selectWorkspace = useCallback((workspace: Workspace | null) => {
+    invalidateApiCache();
     setCurrentWorkspace(workspace);
     setProjects([]);
     setCurrentProject(null);
@@ -163,6 +165,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   // Select project
   const selectProject = useCallback((project: Project | null) => {
+    invalidateApiCache();
     setCurrentProject(project);
     if (project && typeof window !== "undefined") {
       localStorage.setItem("archforge_active_project_id", project.id);

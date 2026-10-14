@@ -951,7 +951,8 @@ export function Architecture3DScene() {
   const [isTourActive, setIsTourActive] = useState<boolean>(false);
   const [tourIndex, setTourIndex] = useState<number>(0);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(false);
-  const [hudFps, setHudFps] = useState<number>(60);
+  const fpsTextRef = useRef<HTMLSpanElement>(null);
+  const hoveredWorldRef = useRef<string | null>(null);
 
   // Controller Interface
   const sceneController = useRef<{
@@ -1679,8 +1680,10 @@ export function Architecture3DScene() {
     container.addEventListener("touchstart", onTouchStart, { passive: true });
     container.addEventListener("touchend", onTouchEnd, { passive: true });
 
-    // 10. Intersection Observer (freeze when offscreen)
+    // 10. Intersection Observer (freeze when offscreen) & Visibility
     let isIntersecting = true;
+    let isPageVisible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -1690,6 +1693,11 @@ export function Architecture3DScene() {
       { threshold: 0.05 }
     );
     observer.observe(container);
+
+    const onVisibilityChange = () => {
+      isPageVisible = document.visibilityState === "visible";
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     // Resize handling
     const onResize = () => {
@@ -1775,18 +1783,20 @@ export function Architecture3DScene() {
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
 
-      if (!isIntersecting) return;
+      if (!isIntersecting || !isPageVisible) return;
 
       const delta = clock.getDelta();
       if (!isOrbitPaused && !prefersReducedMotion) {
         totalTime += delta;
       }
 
-      // FPS tracking
+      // FPS tracking via direct DOM update (no React re-renders)
       frameCount++;
       const now = performance.now();
       if (now - lastFpsTime >= 1000) {
-        setHudFps(frameCount);
+        if (fpsTextRef.current) {
+          fpsTextRef.current.textContent = `${frameCount} FPS`;
+        }
         frameCount = 0;
         lastFpsTime = now;
       }
@@ -1911,7 +1921,7 @@ export function Architecture3DScene() {
         p.mesh.position.lerpVectors(link.p1, link.p2, p.progress);
       });
 
-      // Raycast Hover Detection
+      // Raycast Hover Detection (throttled by ID to avoid React re-renders every 16ms)
       raycaster.setFromCamera(mouse, camera);
       const intersects = raycaster.intersectObjects(planetsMasterGroup.children, true);
 
@@ -1922,10 +1932,18 @@ export function Architecture3DScene() {
         }
         const found = activePlanets.find((ap) => ap.group === parent);
         if (found) {
-          setHoveredWorld(found.world);
-          document.body.style.cursor = "pointer";
+          if (hoveredWorldRef.current !== found.world.id) {
+            hoveredWorldRef.current = found.world.id;
+            setHoveredWorld(found.world);
+            document.body.style.cursor = "pointer";
+          }
+        } else if (hoveredWorldRef.current !== null) {
+          hoveredWorldRef.current = null;
+          setHoveredWorld(null);
+          document.body.style.cursor = "default";
         }
-      } else {
+      } else if (hoveredWorldRef.current !== null) {
+        hoveredWorldRef.current = null;
         setHoveredWorld(null);
         document.body.style.cursor = "default";
       }
@@ -1939,12 +1957,28 @@ export function Architecture3DScene() {
     return () => {
       cancelAnimationFrame(animationFrameId);
       observer.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("resize", onResize);
       container.removeEventListener("mousemove", onPointerMove);
       container.removeEventListener("click", onClick);
       container.removeEventListener("touchstart", onTouchStart);
       container.removeEventListener("touchend", onTouchEnd);
       document.body.style.cursor = "default";
+
+      // Deep GPU resource disposal to avoid WebGL memory leaks
+      scene.traverse((obj) => {
+        if ((obj as THREE.Mesh).geometry) {
+          (obj as THREE.Mesh).geometry.dispose();
+        }
+        if ((obj as THREE.Mesh).material) {
+          const mat = (obj as THREE.Mesh).material;
+          if (Array.isArray(mat)) {
+            mat.forEach((m) => m.dispose());
+          } else {
+            mat.dispose();
+          }
+        }
+      });
 
       if (renderer.domElement && renderer.domElement.parentNode) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);
@@ -2193,7 +2227,7 @@ export function Architecture3DScene() {
 
         {/* Canvas Bottom Status Bar */}
         <div className="absolute bottom-3 right-4 z-10 hidden sm:flex items-center gap-3 text-[11px] font-mono text-muted-foreground/80 bg-panel/70 backdrop-blur-sm px-2.5 py-1 rounded-md border border-border/60">
-          <span>{hudFps} FPS</span>
+          <span ref={fpsTextRef}>60 FPS</span>
           <span>·</span>
           <span>Procedural Realistic Textures</span>
           <span>·</span>

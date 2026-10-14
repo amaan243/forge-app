@@ -1071,9 +1071,15 @@ function ArchitectureCanvas({
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  function nodePos(id: string) {
-    return canvasNodes.find((n) => n.id === id);
-  }
+  const nodeMap = useMemo(() => {
+    const map = new Map<string, CanvasNodeData>();
+    for (let i = 0; i < canvasNodes.length; i++) {
+      map.set(canvasNodes[i].id, canvasNodes[i]);
+    }
+    return map;
+  }, [canvasNodes]);
+
+  const nodePos = useCallback((id: string) => nodeMap.get(id), [nodeMap]);
 
   // Pan event handlers
   const handleMouseDown = (e: React.MouseEvent) => {

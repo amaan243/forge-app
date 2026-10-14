@@ -12,6 +12,7 @@ import {
   type LoginPayload,
   type RegisterPayload,
 } from "@/api/auth";
+import { invalidateApiCache } from "@/api";
 
 interface AuthContextType {
   user: User | null;
@@ -191,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Continue client cleanup even if backend network call fails
     } finally {
+      invalidateApiCache();
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(REFRESH_TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
