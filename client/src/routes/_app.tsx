@@ -89,7 +89,7 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-export const NAVIGATION_GROUPS: NavGroup[] = [
+const NAVIGATION_GROUPS: NavGroup[] = [
   {
     id: "overview",
     label: "Overview",

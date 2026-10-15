@@ -1068,7 +1068,7 @@ export function Architecture3DScene() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.28;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     container.appendChild(renderer.domElement);
 
     // 3. OrbitControls
@@ -1358,7 +1358,8 @@ export function Architecture3DScene() {
           planetGroup.add(accelRing);
 
           // 6. Magnetic Polar Flux Loops
-          fluxGroup = new THREE.Group();
+          const currentFluxGroup = new THREE.Group();
+          fluxGroup = currentFluxGroup;
           [0, Math.PI / 2].forEach((rotY) => {
             const fluxGeo = new THREE.TorusGeometry(1.32, 0.012, 8, 48);
             const fluxMat = new THREE.MeshBasicMaterial({
@@ -1368,9 +1369,9 @@ export function Architecture3DScene() {
             });
             const flux = new THREE.Mesh(fluxGeo, fluxMat);
             flux.rotation.y = rotY;
-            fluxGroup.add(flux);
+            currentFluxGroup.add(flux);
           });
-          planetGroup.add(fluxGroup);
+          planetGroup.add(currentFluxGroup);
           break;
         }
 
@@ -1776,7 +1777,7 @@ export function Architecture3DScene() {
 
     // 12. Animation Render Loop (No React re-renders every frame!)
     let animationFrameId: number;
-    const clock = new THREE.Clock();
+    let lastAnimTime = performance.now();
     let frameCount = 0;
     let lastFpsTime = performance.now();
 
@@ -1785,14 +1786,15 @@ export function Architecture3DScene() {
 
       if (!isIntersecting || !isPageVisible) return;
 
-      const delta = clock.getDelta();
+      const now = performance.now();
+      const delta = Math.min((now - lastAnimTime) / 1000, 0.1);
+      lastAnimTime = now;
       if (!isOrbitPaused && !prefersReducedMotion) {
         totalTime += delta;
       }
 
       // FPS tracking via direct DOM update (no React re-renders)
       frameCount++;
-      const now = performance.now();
       if (now - lastFpsTime >= 1000) {
         if (fpsTextRef.current) {
           fpsTextRef.current.textContent = `${frameCount} FPS`;

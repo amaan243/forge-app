@@ -105,7 +105,7 @@ export const Route = createFileRoute("/")({
   component: LandingPage,
 });
 
-export function LandingPage() {
+function LandingPage() {
   const { isAuthenticated, user } = useAuth();
   const [activeWorkflowStep, setActiveWorkflowStep] = useState(0);
 
