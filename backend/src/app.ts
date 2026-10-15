@@ -24,16 +24,68 @@ import { supabaseAdmin } from "./lib/supabase.js";
 export const app = express();
 app.disable("x-powered-by");
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-const allowedOrigins = Array.from(
-  new Set([
-    env.CLIENT_URL,
-    env.FRONTEND_URL,
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:5175",
-  ].filter((origin): origin is string => Boolean(origin)))
+const defaultAllowedOrigins = [
+  "https://forge-app-client.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+  "http://127.0.0.1:5175",
+];
+
+function sanitizeOrigin(urlStr: string): string {
+  return urlStr.trim().replace(/\/+$/, "");
+}
+
+function parseOrigins(...inputs: (string | undefined)[]): string[] {
+  const result: string[] = [];
+  for (const input of inputs) {
+    if (!input) continue;
+    for (const part of input.split(",")) {
+      const sanitized = sanitizeOrigin(part);
+      if (sanitized) result.push(sanitized);
+    }
+  }
+  return result;
+}
+
+const explicitOrigins = new Set([
+  ...defaultAllowedOrigins,
+  ...parseOrigins(env.CLIENT_URL, env.FRONTEND_URL, env.ALLOWED_ORIGINS),
+]);
+
+function isAllowedOrigin(origin: string): boolean {
+  const sanitized = sanitizeOrigin(origin);
+  if (explicitOrigins.has(sanitized)) return true;
+  if (/^https:\/\/forge-app-client(-[a-z0-9\-]+)?\.vercel\.app$/i.test(sanitized)) {
+    return true;
+  }
+  if (env.ALLOWED_ORIGINS === "*") return true;
+  return false;
+}
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+      "x-request-id",
+    ],
+    optionsSuccessStatus: 204,
+  })
 );
-app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(compression());
 app.use(express.json({ limit: "1mb" }));
 app.use(requestContext);

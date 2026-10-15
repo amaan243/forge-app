@@ -70,4 +70,30 @@ describe("API foundation", () => {
     expect((await request(app).post("/api/v1/projects/00000000-0000-0000-0000-000000000001/design-review")).status).toBe(401);
     expect((await request(app).patch("/api/v1/projects/00000000-0000-0000-0000-000000000001/architecture/versions/00000000-0000-0000-0000-000000000002/edges/00000000-0000-0000-0000-000000000003").send({ label: "calls" })).status).toBe(401);
   });
+
+  it("handles CORS preflight and headers for deployed Vercel frontend", async () => {
+    const origin = "https://forge-app-client.vercel.app";
+    const response = await request(app)
+      .options("/api/v1/auth/login")
+      .set("Origin", origin)
+      .set("Access-Control-Request-Method", "POST")
+      .set("Access-Control-Request-Headers", "Content-Type,Authorization");
+
+    expect(response.status).toBe(204);
+    expect(response.headers["access-control-allow-origin"]).toBe(origin);
+    expect(response.headers["access-control-allow-credentials"]).toBe("true");
+    expect(response.headers["access-control-allow-methods"]).toBeDefined();
+  });
+
+  it("handles CORS preflight for preview Vercel deployments", async () => {
+    const origin = "https://forge-app-client-feat-preview.vercel.app";
+    const response = await request(app)
+      .options("/api/v1/auth/login")
+      .set("Origin", origin)
+      .set("Access-Control-Request-Method", "POST");
+
+    expect(response.status).toBe(204);
+    expect(response.headers["access-control-allow-origin"]).toBe(origin);
+    expect(response.headers["access-control-allow-credentials"]).toBe("true");
+  });
 });
