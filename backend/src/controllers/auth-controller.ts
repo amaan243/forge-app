@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
 import { supabase, supabaseAdmin } from "../lib/supabase.js";
 import { env } from "../config/env.js";
+import { isAllowedOrigin, sanitizeOrigin } from "../config/cors.js";
 import { AppError, ConflictError, UnauthorizedError } from "../errors/app-error.js";
 import {
   registerSchema,
@@ -418,7 +419,28 @@ export const authController = {
 
   getOAuthUrl: (async (request, response) => {
     const provider = (request.params.provider || request.query.provider || "google") as string;
-    const redirectTo = (request.query.redirectTo as string) || `${env.CLIENT_URL}/login`;
+    
+    // Safely resolve redirectTo with validation against allowed origins
+    let redirectTo: string;
+    const requestedRedirect = (request.query.redirectTo as string) || (request.body?.redirectTo as string);
+    if (requestedRedirect) {
+      try {
+        const parsed = new URL(requestedRedirect);
+        if (isAllowedOrigin(parsed.origin)) {
+          redirectTo = requestedRedirect;
+        } else {
+          redirectTo = `${sanitizeOrigin(env.CLIENT_URL || "https://forge-app-client.vercel.app")}/login`;
+        }
+      } catch {
+        redirectTo = `${sanitizeOrigin(env.CLIENT_URL || "https://forge-app-client.vercel.app")}/login`;
+      }
+    } else if (request.headers.origin && isAllowedOrigin(request.headers.origin as string)) {
+      redirectTo = `${sanitizeOrigin(request.headers.origin as string)}/login`;
+    } else if (env.CLIENT_URL) {
+      redirectTo = `${sanitizeOrigin(env.CLIENT_URL)}/login`;
+    } else {
+      redirectTo = "https://forge-app-client.vercel.app/login";
+    }
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: provider as "google",
@@ -431,7 +453,13 @@ export const authController = {
       throw new AppError(error?.message || "Failed to initialize OAuth provider", 400, "OAUTH_INIT_FAILED");
     }
 
-    if (request.accepts("html") && !request.accepts("json")) {
+    // Direct browser redirect only when explicitly asked via query param or document navigation without json
+    const wantsRedirect =
+      request.query.redirect === "true" ||
+      request.query.redirect === "1" ||
+      (request.accepts("html") && !request.accepts("json") && !request.xhr && request.headers["sec-fetch-dest"] === "document");
+
+    if (wantsRedirect) {
       return response.redirect(data.url);
     }
 

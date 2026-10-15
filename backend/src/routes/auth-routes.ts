@@ -7,6 +7,8 @@ export const authRoutes = Router();
 authRoutes.post("/register", authController.register);
 authRoutes.post("/login", authController.login);
 authRoutes.get("/oauth/:provider", authController.getOAuthUrl);
+authRoutes.get("/oauth/:provider/redirect", authController.getOAuthUrl);
+authRoutes.post("/oauth/:provider/redirect", authController.getOAuthUrl);
 authRoutes.post("/oauth/exchange-code", authController.exchangeOAuthCode);
 authRoutes.post("/verify-email", authController.verifyEmail);
 authRoutes.post("/resend-verification", authController.resendVerification);

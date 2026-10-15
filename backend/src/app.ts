@@ -21,71 +21,12 @@ import { authRoutes } from "./routes/auth-routes.js";
 import { qualityRoutes } from "./routes/engineering-quality-routes.js";
 import { Redis } from "ioredis";
 import { supabaseAdmin } from "./lib/supabase.js";
+import { corsOptions, isAllowedOrigin } from "./config/cors.js";
+
 export const app = express();
 app.disable("x-powered-by");
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-const defaultAllowedOrigins = [
-  "https://forge-app-client.vercel.app",
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:5175",
-  "http://127.0.0.1:5173",
-  "http://127.0.0.1:5174",
-  "http://127.0.0.1:5175",
-];
-
-function sanitizeOrigin(urlStr: string): string {
-  return urlStr.trim().replace(/\/+$/, "");
-}
-
-function parseOrigins(...inputs: (string | undefined)[]): string[] {
-  const result: string[] = [];
-  for (const input of inputs) {
-    if (!input) continue;
-    for (const part of input.split(",")) {
-      const sanitized = sanitizeOrigin(part);
-      if (sanitized) result.push(sanitized);
-    }
-  }
-  return result;
-}
-
-const explicitOrigins = new Set([
-  ...defaultAllowedOrigins,
-  ...parseOrigins(env.CLIENT_URL, env.FRONTEND_URL, env.ALLOWED_ORIGINS),
-]);
-
-function isAllowedOrigin(origin: string): boolean {
-  const sanitized = sanitizeOrigin(origin);
-  if (explicitOrigins.has(sanitized)) return true;
-  if (/^https:\/\/forge-app-client(-[a-z0-9\-]+)?\.vercel\.app$/i.test(sanitized)) {
-    return true;
-  }
-  if (env.ALLOWED_ORIGINS === "*") return true;
-  return false;
-}
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || isAllowedOrigin(origin)) {
-        return callback(null, true);
-      }
-      return callback(null, false);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-      "Accept",
-      "Origin",
-      "x-request-id",
-    ],
-    optionsSuccessStatus: 204,
-  })
-);
+app.use(cors(corsOptions));
 app.use(compression());
 app.use(express.json({ limit: "1mb" }));
 app.use(requestContext);
@@ -109,5 +50,12 @@ app.use("/api/docs", openApiRoutes);
 async function dependencyHealth(): Promise<{ database: "ok" | "unavailable"; redis: "ok" | "unavailable" }> { let database: "ok" | "unavailable" = "ok"; let redis: "ok" | "unavailable" = "ok"; try { await Promise.race([supabaseAdmin.from("profiles").select("id").limit(1), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("database health timeout")), 1000))]); } catch { database = "unavailable"; } try { const client = new Redis(env.REDIS_URL, { lazyConnect: true, connectTimeout: 1000, maxRetriesPerRequest: 0 }); client.on("error", () => undefined); await client.connect(); await client.ping(); await client.quit(); } catch { redis = "unavailable"; } return { database, redis }; }
 app.get("/health", async (_request, response) => { const dependencies = await dependencyHealth(); response.json({ success: true, status: "ok", ...dependencies, timestamp: new Date().toISOString() }); });
 app.get("/ready", async (_request, response) => { const dependencies = await dependencyHealth(); const ready = dependencies.database === "ok" && dependencies.redis === "ok"; response.status(ready ? 200 : 503).json({ success: ready, status: ready ? "ok" : "unavailable", ...dependencies, timestamp: new Date().toISOString() }); });
-app.use((_request, response) => response.status(404).json({ success: false, message: "Route not found", error: { code: "NOT_FOUND" } }));
+app.use((request, response) => {
+  const origin = request.headers.origin;
+  if (origin && isAllowedOrigin(origin) && !response.headersSent) {
+    response.setHeader("Access-Control-Allow-Origin", origin);
+    response.setHeader("Access-Control-Allow-Credentials", "true");
+  }
+  response.status(404).json({ success: false, message: "Route not found", error: { code: "NOT_FOUND" } });
+});
 app.use(errorHandler);

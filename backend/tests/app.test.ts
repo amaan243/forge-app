@@ -85,6 +85,18 @@ describe("API foundation", () => {
     expect(response.headers["access-control-allow-methods"]).toBeDefined();
   });
 
+  it("handles CORS preflight for local development origin", async () => {
+    const origin = "http://localhost:5173";
+    const response = await request(app)
+      .options("/api/v1/auth/login")
+      .set("Origin", origin)
+      .set("Access-Control-Request-Method", "POST");
+
+    expect(response.status).toBe(204);
+    expect(response.headers["access-control-allow-origin"]).toBe(origin);
+    expect(response.headers["access-control-allow-credentials"]).toBe("true");
+  });
+
   it("handles CORS preflight for preview Vercel deployments", async () => {
     const origin = "https://forge-app-client-feat-preview.vercel.app";
     const response = await request(app)
@@ -93,6 +105,79 @@ describe("API foundation", () => {
       .set("Access-Control-Request-Method", "POST");
 
     expect(response.status).toBe(204);
+    expect(response.headers["access-control-allow-origin"]).toBe(origin);
+    expect(response.headers["access-control-allow-credentials"]).toBe("true");
+  });
+
+  it("rejects unauthorized origins from receiving CORS headers", async () => {
+    const response = await request(app)
+      .options("/api/v1/auth/login")
+      .set("Origin", "https://malicious-attacker.com")
+      .set("Access-Control-Request-Method", "POST");
+
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
+  it("handles preflight for Google OAuth redirect endpoint", async () => {
+    const origin = "https://forge-app-client.vercel.app";
+    const response = await request(app)
+      .options("/api/v1/auth/oauth/google/redirect")
+      .set("Origin", origin)
+      .set("Access-Control-Request-Method", "GET")
+      .set("Access-Control-Request-Headers", "Content-Type,Authorization");
+
+    expect(response.status).toBe(204);
+    expect(response.headers["access-control-allow-origin"]).toBe(origin);
+    expect(response.headers["access-control-allow-credentials"]).toBe("true");
+  });
+
+  it("returns Google OAuth initiation JSON format for /oauth/google and /oauth/google/redirect", async () => {
+    const origin = "https://forge-app-client.vercel.app";
+
+    // Test primary route
+    const res1 = await request(app)
+      .get("/api/v1/auth/oauth/google")
+      .set("Origin", origin)
+      .set("Accept", "application/json");
+
+    expect(res1.status).toBe(200);
+    expect(res1.headers["access-control-allow-origin"]).toBe(origin);
+    expect(res1.headers["access-control-allow-credentials"]).toBe("true");
+    expect(res1.body).toMatchObject({
+      success: true,
+      message: "OAuth URL generated",
+      data: {
+        provider: "google",
+        url: expect.stringContaining("supabase.co"),
+      },
+    });
+
+    // Test /redirect alias route
+    const res2 = await request(app)
+      .get("/api/v1/auth/oauth/google/redirect")
+      .set("Origin", origin)
+      .set("Accept", "application/json");
+
+    expect(res2.status).toBe(200);
+    expect(res2.headers["access-control-allow-origin"]).toBe(origin);
+    expect(res2.headers["access-control-allow-credentials"]).toBe("true");
+    expect(res2.body).toMatchObject({
+      success: true,
+      message: "OAuth URL generated",
+      data: {
+        provider: "google",
+        url: expect.stringContaining("supabase.co"),
+      },
+    });
+  });
+
+  it("ensures error responses from allowed origins retain CORS headers", async () => {
+    const origin = "https://forge-app-client.vercel.app";
+    const response = await request(app)
+      .get("/api/v1/does-not-exist")
+      .set("Origin", origin);
+
+    expect(response.status).toBe(404);
     expect(response.headers["access-control-allow-origin"]).toBe(origin);
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
   });
