@@ -1,17 +1,31 @@
 import apiClient from "./client";
 
+export interface ImportantDecisionItem {
+  decision: string;
+  rationale?: string;
+  tradeOff?: string;
+  [key: string]: unknown;
+}
+
+export interface TechnologyChoiceItem {
+  name: string;
+  category?: string;
+  reason?: string;
+  [key: string]: unknown;
+}
+
 export interface ProjectStoryContent {
-  problem: string;
-  requirements: string[];
-  architecture: string[];
-  importantDecisions: string[];
-  technologyChoices: string[];
-  dataFlow: Array<{ source_node_id?: string; target_node_id?: string; [key: string]: unknown }>;
-  security: string[];
-  scalability: string[];
-  tradeOffs: string[];
-  evolution: string[];
-  currentState: string;
+  problem?: string;
+  requirements?: Array<string | { id?: string; title?: string; description?: string; [key: string]: unknown }>;
+  architecture?: Array<string | { name?: string; type?: string; [key: string]: unknown }>;
+  importantDecisions?: Array<string | ImportantDecisionItem>;
+  technologyChoices?: Array<string | TechnologyChoiceItem>;
+  dataFlow?: Array<string | { source_node_id?: string; target_node_id?: string; relationship?: string; protocol?: string; [key: string]: unknown }>;
+  security?: Array<string | unknown>;
+  scalability?: Array<string | unknown>;
+  tradeOffs?: Array<string | unknown>;
+  evolution?: Array<string | unknown>;
+  currentState?: string;
   [key: string]: unknown;
 }
 
